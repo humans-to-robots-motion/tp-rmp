@@ -1,0 +1,6 @@
+matplotlib
+networkx
+pyyaml
+pybullet
+qibullet
+git+git://github.com/anindex/pyrieef
