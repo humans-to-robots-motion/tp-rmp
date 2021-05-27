@@ -2,3 +2,4 @@ matplotlib
 pyyaml
 pybullet
 scipy
+tqdm

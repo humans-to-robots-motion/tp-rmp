@@ -6,8 +6,8 @@ _path_file = os.path.dirname(os.path.realpath(__file__))
 
 
 class Recorder2D:
-    def __init__(self, plot, task_name='traj'):
-        self.save_path = os.path.join(_path_file, '..', '..', 'data', 'demonstrations')
+    def __init__(self, plot, task_name='test'):
+        self.save_path = os.path.join(_path_file, '..', '..', 'data', 'tasks', task_name, 'demos')
         os.makedirs(self.save_path, exist_ok=True)
         self.save_name = os.path.join(self.save_path, task_name + str(time.time()) + '.p')
         self.plot = plot
