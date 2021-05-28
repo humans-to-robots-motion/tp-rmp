@@ -7,6 +7,7 @@ from torch import nn
 from torch import optim
 from tqdm import tqdm  # Displays a progress bar
 from os.path import join, dirname, abspath
+from collections import deque
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
@@ -14,14 +15,22 @@ from tprmp.utils.load_demos import load_demos  # noqa
 from tprmp.networks.rmp_net import DeepRMPNetwork, device  # noqa
 from tprmp.demonstrations.trajectory import compute_traj_derivatives  # noqa
 
-dt = 0.1
+T = 3
+dt = 0.005
 hidden_dim = 64
-num_epoch = 5
+num_epoch = 50
 lr = 5e-3
 lr_step_size = 40
 lr_gamma = 0.5
 weight_decay = 1e-3
 grad_norm_bound = 10.0
+log_window = 10
+
+
+def simple_demo(T, dt):
+    x = np.linspace(0, 4, int(1 / dt * T))
+    y = np.linspace(0, 2, int(1 / dt * T))
+    return [(x, y)]
 
 
 def train(model, demos):
@@ -32,7 +41,7 @@ def train(model, demos):
     print('Start training')
     model.train()  # Set the model to training mode
     for i in tqdm(range(num_epoch)):
-        running_loss = []
+        running_loss = deque(maxlen=log_window)
         for demo in demos:
             traj, d_traj, dd_traj = demo.values()
             for t in range(traj.shape[1]):
@@ -46,7 +55,7 @@ def train(model, demos):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_norm_bound)
                 optimizer.step()  # Update trainable weights
         scheduler.step()
-        if i % 10 == 0:
+        if i % log_window == 0:
             print("Epoch {} loss:{}".format(i + 1, np.mean(running_loss)))
 
 
@@ -80,15 +89,16 @@ def draw_force_pattern(model):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-                                     description='Example run: python train_deeprmp.py test.p')
-    parser.add_argument('task', help='The task folder', type=str, default='test')
-    parser.add_argument('data', help='The data file', type=str, default='data.p')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    #                                  description='Example run: python train_deeprmp.py test.p')
+    # parser.add_argument('task', help='The task folder', type=str, default='test')
+    # parser.add_argument('data', help='The data file', type=str, default='data.p')
+    # args = parser.parse_args()
 
-    DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
-    data_file = join(DATA_DIR, args.data)
-    trajs = load_demos(data_file)
+    # DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
+    # data_file = join(DATA_DIR, args.data)
+    # trajs = load_demos(data_file)
+    trajs = simple_demo(T, dt)
     # preprocess data
     dim_M = len(trajs[0])
     demos = []
@@ -109,4 +119,4 @@ if __name__ == '__main__':
     model = DeepRMPNetwork(dim_M, hidden_dim=hidden_dim).to(device)
     train(model, demos)
     draw_force_pattern(model)
-    retrieve(model, np.array([0., 4.]), np.zeros(2), 3)
+    retrieve(model, np.zeros(2), np.zeros(2), T)
