@@ -74,7 +74,7 @@ class DeepRMPNetwork(nn.Module):
         assert (2 * Lo.shape[1] == (Ld.shape[1]**2 - Ld.shape[1]))
 
         diagonal_matrix = torch.diag_embed(Ld)
-        L = torch.tril(torch.ones(*diagonal_matrix.shape, device=self.device)) - torch.eye(self.dim_M)
+        L = torch.tril(torch.ones(*diagonal_matrix.shape, device=self.device)) - torch.eye(self.dim_M, device=self.device)
 
         # Set off diagonals
         L[L == 1] = Lo.view(-1)

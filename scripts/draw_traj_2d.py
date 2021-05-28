@@ -12,7 +12,7 @@ ax = fig.add_subplot(111)
 ax.set_title('Left-lick to add points, right-click to save traj')
 ax.set_xlim([0, 5])
 ax.set_ylim([0, 5])
-p, = ax.plot([], [], linestyle="none", marker="o", color="r", markersize=5)
+p, = ax.plot([], [], linestyle="none", marker="o", color="r", markersize=2)
 recorder = Recorder2D(p)
 
 plt.show()
