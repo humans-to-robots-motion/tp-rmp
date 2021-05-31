@@ -50,7 +50,7 @@ def smooth_traj(traj, window_length=30, beta=14):
     smooth_traj = traj.copy()
     for t in range(length):
         weights = window[max(half_wl - t, 0):(2 * half_wl - max(0, t + half_wl - length))]
-        smooth_traj[:, t] = np.average(smooth_traj[:, max(t - half_wl, 0):(t + half_wl)], weights=weights)
+        smooth_traj[:, t] = np.average(smooth_traj[:, max(t - half_wl, 0):(t + half_wl)], weights=weights, axis=1)
     if smooth_traj.shape != traj.shape:
         raise ValueError('[trajectory]: Shape of smoothed_traj is different from input traj')
     return smooth_traj

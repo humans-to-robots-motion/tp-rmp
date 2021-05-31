@@ -1,130 +1,351 @@
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
-# auto use gpu if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+class LowTri:
+
+    def __init__(self, m):
+
+        # Calculate lower triangular matrix indices using numpy
+        self._m = m
+        self._idx = np.tril_indices(self._m)
+
+    def __call__(self, l):
+        batch_size = l.shape[0]
+        self._L = torch.zeros(batch_size, self._m, self._m).type_as(l)
+
+        # Assign values to matrix:
+        self._L[:batch_size, self._idx[0], self._idx[1]] = l[:]
+        return self._L[:batch_size]
+
+
+class SoftplusDer(nn.Module):
+    def __init__(self, beta=1.):
+        super(SoftplusDer, self).__init__()
+        self._beta = beta
+
+    def forward(self, x):
+        cx = torch.clamp(x, -20., 20.)
+        exp_x = torch.exp(self._beta * cx)
+        out = exp_x / (exp_x + 1.0)
+
+        if torch.isnan(out).any():
+            print("SoftPlus Forward output is NaN.")
+        return out
+
+
+class ReLUDer(nn.Module):
+    def __init__(self):
+        super(ReLUDer, self).__init__()
+
+    def forward(self, x):
+        return torch.ceil(torch.clamp(x, 0, 1))
+
+
+class Linear(nn.Module):
+    def __init__(self):
+        super(Linear, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+class LinearDer(nn.Module):
+    def __init__(self):
+        super(LinearDer, self).__init__()
+
+    def forward(self, x):
+        return torch.clamp(x, 1, 1)
+
+
+class Cos(nn.Module):
+    def __init__(self):
+        super(Cos, self).__init__()
+
+    def forward(self, x):
+        return torch.cos(x)
+
+
+class CosDer(nn.Module):
+    def __init__(self):
+        super(CosDer, self).__init__()
+
+    def forward(self, x):
+        return -torch.sin(x)
+
+
+class LagrangianLayer(nn.Module):
+
+    def __init__(self, input_size, dim_M, activation="ReLu"):
+        super(LagrangianLayer, self).__init__()
+
+        # Create layer weights and biases:
+        self.dim_M = dim_M
+        self.weight = nn.Parameter(torch.Tensor(dim_M, input_size))
+        self.bias = nn.Parameter(torch.Tensor(dim_M))
+
+        # Initialize activation function and its derivative:
+        if activation == "ReLu":
+            self.g = nn.ReLU()
+            self.g_prime = ReLUDer()
+
+        elif activation == "SoftPlus":
+            self.softplus_beta = 1.0
+            self.g = nn.Softplus(beta=self.softplus_beta)
+            self.g_prime = SoftplusDer(beta=self.softplus_beta)
+
+        elif activation == "Cos":
+            self.g = Cos()
+            self.g_prime = CosDer()
+
+        elif activation == "Linear":
+            self.g = Linear()
+            self.g_prime = LinearDer()
+
+        else:
+            raise ValueError("Activation Type must be in ['Linear', 'ReLu', 'SoftPlus', 'Cos'] but is {0}".format(self.activation))
+
+    def forward(self, q, der_prev):
+        # Apply Affine Transformation:
+        a = F.linear(q, self.weight, self.bias)
+        out = self.g(a)
+        der = torch.matmul(self.g_prime(a).view(-1, self.dim_M, 1) * self.weight, der_prev)
+        return out, der
 
 
 class DeepRMPNetwork(nn.Module):
-    def __init__(self, dim_M, hidden_dim=64):
-        super().__init__()
+
+    def __init__(self, dim_M, **kwargs):
+        super(DeepRMPNetwork, self).__init__()
+
+        # Read optional arguments:
+        self.n_width = kwargs.get("n_width", 128)
+        self.n_hidden = kwargs.get("n_depth", 2)
+        self._b0 = kwargs.get("b_init", 0.1)
+        self._b0_diag = kwargs.get("b_diag_init", 0.1)
+
+        self._w_init = kwargs.get("w_init", "xavier_normal")
+        self._g_hidden = kwargs.get("g_hidden", np.sqrt(2.))
+        self._g_output = kwargs.get("g_hidden", 0.125)
+        self._p_sparse = kwargs.get("p_sparse", 0.2)
+        self._epsilon = kwargs.get("diagonal_epsilon", 1.e-5)
+
+        # Construct Weight Initialization:
+        if self._w_init == "xavier_normal":
+
+            # Construct initialization function:
+            def init_hidden(layer):
+
+                # Set the Hidden Gain:
+                if self._g_hidden <= 0.0: hidden_gain = torch.nn.init.calculate_gain('relu')
+                else: hidden_gain = self._g_hidden
+
+                torch.nn.init.constant_(layer.bias, self._b0)
+                torch.nn.init.xavier_normal_(layer.weight, hidden_gain)
+
+            def init_output(layer):
+                # Set Output Gain:
+                if self._g_output <= 0.0: output_gain = torch.nn.init.calculate_gain('linear')
+                else: output_gain = self._g_output
+
+                torch.nn.init.constant_(layer.bias, self._b0)
+                torch.nn.init.xavier_normal_(layer.weight, output_gain)
+
+        elif self._w_init == "orthogonal":
+
+            # Construct initialization function:
+            def init_hidden(layer):
+                # Set the Hidden Gain:
+                if self._g_hidden <= 0.0: hidden_gain = torch.nn.init.calculate_gain('relu')
+                else: hidden_gain = self._g_hidden
+
+                torch.nn.init.constant_(layer.bias, self._b0)
+                torch.nn.init.orthogonal_(layer.weight, hidden_gain)
+
+            def init_output(layer):
+                # Set Output Gain:
+                if self._g_output <= 0.0: output_gain = torch.nn.init.calculate_gain('linear')
+                else: output_gain = self._g_output
+
+                torch.nn.init.constant_(layer.bias, self._b0)
+                torch.nn.init.orthogonal_(layer.weight, output_gain)
+
+        elif self._w_init == "sparse":
+            assert self._p_sparse < 1. and self._p_sparse >= 0.0
+
+            # Construct initialization function:
+            def init_hidden(layer):
+                p_non_zero = self._p_sparse
+                hidden_std = self._g_hidden
+
+                torch.nn.init.constant_(layer.bias, self._b0)
+                torch.nn.init.sparse_(layer.weight, p_non_zero, hidden_std)
+
+            def init_output(layer):
+                p_non_zero = self._p_sparse
+                output_std = self._g_output
+
+                torch.nn.init.constant_(layer.bias, self._b0)
+                torch.nn.init.sparse_(layer.weight, p_non_zero, output_std)
+
+        else:
+            raise ValueError("Weight Initialization Type must be in ['xavier_normal', 'orthogonal', 'sparse'] but is {0}".format(self._w_init))
+
+        # Compute In- / Output Sizes:
         self.dim_M = dim_M
-        self.num_Lo = int(0.5 * (dim_M ** 2 - dim_M))
-        self.fc1 = nn.Linear(dim_M, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.m = int((dim_M ** 2 + dim_M) / 2)
 
-        # Output layers
-        self.fc_G = nn.Linear(hidden_dim, dim_M)
-        self.fc_Ld = nn.Linear(hidden_dim, dim_M)
-        self.fc_Lo = nn.Linear(hidden_dim, self.num_Lo)
+        # Compute non-zero elements of L:
+        l_output_size = int((self.dim_M ** 2 + self.dim_M) / 2)
+        l_lower_size = l_output_size - self.dim_M
 
-        self.act_fn = F.leaky_relu
-        self.neg_slope = -0.01
-        self.device = device
-        self.interim_values = {}
+        # Friction output size
+        b_output_size = self.dim_M ** 2
 
-    def compute_gradients_for_forward_pass(self, qdot, h1, h2, h3):
-        """
-        Computes partial derivatives of the inertia/mass matrix (M) needed for the forward pass
+        # Calculate the indices of the diagonal elements of L:
+        idx_diag = np.arange(self.dim_M) + 1
+        idx_diag = idx_diag * (idx_diag + 1) / 2 - 1
 
-        Returns
-        -------
-        :return: dMdq and dMdt
-        """
-        n, d = qdot.shape
+        # Calculate the indices of the off-diagonal elements of L:
+        idx_tril = np.extract([x not in idx_diag for x in np.arange(l_output_size)], np.arange(l_output_size))
 
-        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape, device=self.device),
-                                self.neg_slope * torch.ones(h1.shape, device=self.device))
-        dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight
+        # Indexing for concatenation of l_o  and l_d
+        cat_idx = np.hstack((idx_diag, idx_tril))
+        order = np.argsort(cat_idx)
+        self._idx = np.arange(cat_idx.size)[order]
 
-        dRelu_fc2 = torch.where(h2 > 0, torch.ones(h2.shape, device=self.device),
-                                self.neg_slope * torch.ones(h2.shape, device=self.device))
-        dh2_dh1 = torch.diag_embed(dRelu_fc2) @ self.fc2.weight
+        # create it once and only apply repeat, this may decrease memory allocation
+        self._eye = torch.eye(self.dim_M).view(1, self.dim_M, self.dim_M)
+        self.low_tri = LowTri(self.dim_M)
 
-        dRelu_dfc_Ld = torch.sigmoid(h3)  # torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
+        # Create Network:
+        self.layers = nn.ModuleList()
+        non_linearity = kwargs.get("activation", "ReLu")
 
-        dld_dh2 = torch.diag_embed(dRelu_dfc_Ld) @ self.fc_Ld.weight
-        dlo_dh2 = self.fc_Lo.weight
+        # Create Input Layer:
+        self.layers.append(LagrangianLayer(self.dim_M, self.n_width, activation=non_linearity))
+        init_hidden(self.layers[-1])
 
-        dld_dq = dld_dh2 @ dh2_dh1 @ dh1_dq
-        dlo_dq = dlo_dh2 @ dh2_dh1 @ dh1_dq
+        # Create Hidden Layer:
+        for _ in range(1, self.n_hidden):
+            self.layers.append(LagrangianLayer(self.n_width, self.n_width, activation=non_linearity))
+            init_hidden(self.layers[-1])
 
-        dld_dt = (dld_dq @ qdot.view(n, d, 1)).squeeze(-1)
-        dlo_dt = (dlo_dq @ qdot.view(n, d, 1)).squeeze(-1)
-        dld_dq = dld_dq.permute(0, 2, 1)
+        # Create output Layer:
+        self.net_g = LagrangianLayer(self.n_width, 1, activation="Linear")
+        init_output(self.net_g)
 
-        dL_dt = self.assemble_lower_triangular_matrix(dlo_dt, dld_dt)
-        dL_dq = self.assemble_lower_triangular_matrix(dlo_dq, dld_dq)
+        self.net_lo = LagrangianLayer(self.n_width, l_lower_size, activation="Linear")
+        init_hidden(self.net_lo)
 
-        return dL_dq, dL_dt
+        # The diagonal must be non-negative. Therefore, the non-linearity is set to ReLu.
+        self.net_ld = LagrangianLayer(self.n_width, self.dim_M, activation="ReLu")
+        init_hidden(self.net_ld)
+        torch.nn.init.constant_(self.net_ld.bias, self._b0_diag)
 
-    def assemble_lower_triangular_matrix(self, Lo, Ld):
-        """
-        Assembled a lower triangular matrix from it's diagonal and off-diagonal elements
+        # Init friction matrix
+        self.net_B = LagrangianLayer(self.n_width, b_output_size, activation="Linear")
+        init_hidden(self.net_B)
 
-        Parameters
-        ----------
-        :param Lo: Off diagonal elements of lower triangular matrix
-        :param Ld: Diagonal elements of lower triangular matrix
+    def forward(self, q, qd):
+        M, c, g, B, _, _, _ = self._dyn_model(q, qd)
+        return M, c, g, B
 
-        Returns
-        -------
-        :return: Lower triangular matrix L
-        """
-        assert (2 * Lo.shape[1] == (Ld.shape[1]**2 - Ld.shape[1]))
+    def _dyn_model(self, q, qd):
+        qd_3d = qd.view(-1, self.dim_M, 1)
+        qd_4d = qd.view(-1, 1, self.dim_M, 1)
 
-        diagonal_matrix = torch.diag_embed(Ld)
-        L = torch.tril(torch.ones(*diagonal_matrix.shape, device=self.device)) - torch.eye(self.dim_M, device=self.device)
+        # Create initial derivative of dq/dq.
+        der = self._eye.repeat(q.shape[0], 1, 1).type_as(q)
 
-        # Set off diagonals
-        L[L == 1] = Lo.view(-1)
-        # Add diagonals
-        L = L + diagonal_matrix
-        return L
+        # Compute shared network between l & g:
+        y, der = self.layers[0](q, der)
 
-    def forward(self, q, q_dot):
-        """
-        Deep RMP Network forward pass
-        Parameters
-        ----------
-        :param q: pose
-        :param q_dot: velocity
+        for i in range(1, len(self.layers)):
+            y, der = self.layers[i](y, der)
 
-        Returns
-        -------
-        :return: M, C, G
-        where M is inertia matrix, C coriolis term, G is potentials term
-        """
-        n, d = q.shape
+        # Compute the network heads including the corresponding derivative:
+        l_lower, der_l_lower = self.net_lo(y, der)
+        l_diag, der_l_diag = self.net_ld(y, der)
 
-        hidden1 = self.act_fn(self.fc1(q))
-        hidden2 = self.act_fn(self.fc2(hidden1))
-        hidden3 = self.fc_Ld(hidden2)
+        # Compute B
+        B, der_B = self.net_B(y, der)
+        B = B.view(-1, self.dim_M, self.dim_M)
 
-        g = self.fc_G(hidden2)
-        Ld = F.softplus(hidden3)
-        Lo = self.fc_Lo(hidden2)
-        L = self.assemble_lower_triangular_matrix(Lo, Ld)
-        dL_dq, dL_dt = self.compute_gradients_for_forward_pass(q_dot, hidden1, hidden2, hidden3)
+        # Compute the potential energy and the gravitational force:
+        V, der_V = self.net_g(y, der)
+        V = V.squeeze()
+        g = der_V.squeeze()
 
-        # Inertia matrix and time derivative
-        M = L @ L.transpose(1, 2) + 1e-9 * torch.eye(d, device=self.device)  # small bias term to enforce pos def
-        dM_dt = L @ dL_dt.permute(0, 2, 1) + dL_dt @ L.permute(0, 2, 1)
+        # Assemble l and der_l
+        l_diag = l_diag
+        l = torch.cat((l_diag, l_lower), 1)[:, self._idx]
+        der_l = torch.cat((der_l_diag, der_l_lower), 1)[:, self._idx, :]
 
-        # Compute quadratic term d/dq [q_dot.T @ M @ q_dot]
-        q_dot_repeated = q_dot.repeat(d, 1)
-        dL_dqi = dL_dq.view(n * d, d, d)
-        L_repeated = L.repeat(d, 1, 1)
-        quadratic_term = q_dot_repeated.view(-1, 1, d) @ (dL_dqi @ L_repeated.transpose(1, 2) +
-                                                          L_repeated @ dL_dqi.transpose(1, 2)) @ q_dot_repeated.view(-1, d, 1)
+        # Compute M:
+        L = self.low_tri(l)
+        LT = L.transpose(dim0=1, dim1=2)
+        M = torch.matmul(L, LT) + self._epsilon * torch.eye(self.dim_M).type_as(L)
 
-        # Compute coriolis term
-        c = dM_dt @ q_dot.view(n, d, 1) - 0.5 * quadratic_term.view(n, d, 1)
+        # Calculate dH/dt
+        Ldt = self.low_tri(torch.matmul(der_l, qd_3d).view(-1, self.m))
+        Hdt = torch.matmul(L, Ldt.transpose(dim0=1, dim1=2)) + torch.matmul(Ldt, LT)
 
-        return M.squeeze(), c.squeeze(), g.squeeze()  # full RMP terms
+        # Calculate dH/dq:
+        Ldq = self.low_tri(der_l.transpose(2, 1).reshape(-1, self.m)).reshape(-1, self.dim_M, self.dim_M, self.dim_M)
+        Hdq = torch.matmul(Ldq, LT.view(-1, 1, self.dim_M, self.dim_M)) + torch.matmul(L.view(-1, 1, self.dim_M, self.dim_M), Ldq.transpose(2, 3))
+
+        # Compute the Coriolis & Centrifugal forces:
+        Hdt_qd = torch.matmul(Hdt, qd_3d).view(-1, self.dim_M)
+        quad_dq = torch.matmul(qd_4d.transpose(dim0=2, dim1=3), torch.matmul(Hdq, qd_4d)).view(-1, self.dim_M)
+        c = Hdt_qd - 1. / 2. * quad_dq
+
+        # Compute kinetic energy T
+        H_qd = torch.matmul(M, qd_3d).view(-1, self.dim_M)
+        T = 1. / 2. * torch.matmul(qd_4d.transpose(dim0=2, dim1=3), H_qd.view(-1, 1, self.dim_M, 1)).view(-1)
+
+        # Compute dV/dt
+        dVdt = torch.matmul(qd_4d.transpose(dim0=2, dim1=3), g.view(-1, 1, self.dim_M, 1)).view(-1)
+        return M, c, g, B, T, V, dVdt
+
+    def rmp(self, q, qd):
+        M, c, g, B, _, _, _ = self._dyn_model(q, qd)
+
+        # Compute Acceleration, e.g., forward model:
+        invH = torch.inverse(M)
+        friction_term = torch.matmul(B, qd.view(-1, self.dim_M, 1)).view(-1, self.dim_M, 1)
+        qdd_pred = (torch.matmul(invH, (- c - g).view(-1, self.dim_M, 1)) + torch.matmul(invH, friction_term)).view(-1, self.dim_M)
+        return qdd_pred.squeeze()
+
+    def energy(self, q, qd):
+        _, _, _, _, T, V, _ = self._dyn_model(q, qd)
+        E = T + V
+        return E
+
+    def cuda(self, device=None):
+
+        # Move the Network to the GPU:
+        super(DeepRMPNetwork, self).cuda(device=device)
+
+        # Move the eye matrix to the GPU:
+        self._eye = self._eye.cuda()
+        self.device = self._eye.device
+        return self
+
+    def cpu(self):
+
+        # Move the Network to the CPU:
+        super(DeepRMPNetwork, self).cpu()
+
+        # Move the eye matrix to the CPU:
+        self._eye = self._eye.cpu()
+        self.device = self._eye.device
+        return self
 
 
 if __name__ == "__main__":
-    network = DeepRMPNetwork(2, 64)
-    test_input = torch.ones(1, 6)
-    network(test_input)
+    network = DeepRMPNetwork(2)
+    q, dq = torch.ones(1, 2), torch.ones(1, 2)
+    network(q, dq)
