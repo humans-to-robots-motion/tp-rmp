@@ -11,15 +11,15 @@ from collections import deque
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
-from tprmp.utils.load_demos import load_demos  # noqa
+from tprmp.utils.loading import load_demos  # noqa
 from tprmp.networks.rmp_net import DeepRMPNetwork  # noqa
 from tprmp.demonstrations.trajectory import compute_traj_derivatives  # noqa
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 T = 3
-dt = 0.005
+dt = 0.1
 hidden_dim = 128
-num_epoch = 20
+num_epoch = 30
 lr = 5e-3
 lr_step_size = 40
 lr_gamma = 0.5
@@ -38,7 +38,7 @@ def simple_demo(T, dt):
 
 
 def train(model, demos):
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=lr_gamma)
     # training routine
@@ -52,8 +52,9 @@ def train(model, demos):
                 x, dx, ddx = torch.from_numpy(traj[:, t]).unsqueeze(0).to(device), torch.from_numpy(d_traj[:, t]).unsqueeze(0).to(device), torch.from_numpy(dd_traj[:, t]).to(device)
                 optimizer.zero_grad()
                 M, c, g, B = model(x, dx)
-                rmp = M @ ddx + B @ dx.squeeze(0) + c + g  # output current RMP
-                loss = criterion(rmp, torch.zeros_like(rmp, device=device))  # enforce conservative structure
+                rmp = M @ ddx + c + g  # output current RMP
+                geo_term = torch.inverse(M) @ g + torch.norm(dx)
+                loss = criterion(rmp + geo_term, torch.zeros_like(rmp, device=device))  # enforce conservative structure
                 running_loss.append(loss.item())
                 loss.backward()  # Backprop gradients to all tensors in the network
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_norm_bound)
@@ -93,16 +94,16 @@ def draw_force_pattern(model):
 
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    #                                  description='Example run: python train_deeprmp.py test.p')
-    # parser.add_argument('task', help='The task folder', type=str, default='test')
-    # parser.add_argument('data', help='The data file', type=str, default='test.p')
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                     description='Example run: python train_deeprmp.py test.p')
+    parser.add_argument('task', help='The task folder', type=str, default='test')
+    parser.add_argument('data', help='The data file', type=str, default='test.p')
+    args = parser.parse_args()
 
-    # DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
-    # data_file = join(DATA_DIR, args.data)
-    # trajs = load_demos(data_file)
-    trajs = simple_demo(T, dt)
+    DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
+    data_file = join(DATA_DIR, args.data)
+    trajs = load_demos(data_file)
+    # trajs = simple_demo(T, dt)
     # preprocess data
     dim_M = len(trajs[0])
     demos = []
@@ -117,4 +118,4 @@ if __name__ == '__main__':
     model = DeepRMPNetwork(dim_M).to(device)
     train(model, demos)
     draw_force_pattern(model)
-    retrieve(model, np.zeros(2), 0.1 * np.ones(2), T)
+    retrieve(model, np.zeros(2), np.zeros(2), T)
