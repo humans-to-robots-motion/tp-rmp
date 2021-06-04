@@ -1,11 +1,12 @@
 import numpy as np
 
 from tprmp.demonstrations.frame import Frame
+from tprmp.demonstrations.manifold import Manifold
 from tprmp.demonstrations.trajectory import compute_traj_derivatives
 
 
-class Demonstration(object):
-    def __init__(self, traj, sampling_time=0.1, smooth=False):
+class Demonstrations(object):
+    def __init__(self, traj, manifold=None, dt=0.1, smooth=False):
         """
         Parameters
         ----------
@@ -14,12 +15,17 @@ class Demonstration(object):
 
         Optional parameters
         -------------------
-        :param sampling_time: float, the sampling time with which the demonstration was recorded
-        TODO: add manifolds
+        :param dt: float, the sampling time with which the demonstration was recorded
         """
+        self._dim_M, self._length = traj.shape
+        if manifold is None:
+            manifold = Manifold.get_euclidean_manifold(self.dim)
+        self._manifold = manifold
+        if self._dim_M != manifold.dim_M:
+            raise RuntimeError('[Demonstrations] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, manifold.dim_M))
         self._smooth = smooth
         self._task_parameters = dict()
-        self._sampling_time = sampling_time
+        self._dt = dt
         self.traj = traj
 
     def get_task_parameters(self, t=0, frame=None):
@@ -43,9 +49,9 @@ class Demonstration(object):
             frames = self._task_parameters[frame][min(t, len(self._task_parameters[frame]) - 1)]
         return frames
 
-    def add_frame_from_A_b(self, A, b, name, constant=False):
+    def add_frame_from_linear_map(self, A, b, name, constant=False):
         """
-        This method adds a new task parameter to the demonstration for a given orientation A and translation b.
+        This method adds a new task parameter to the demonstration for a given linear map.
 
         Parameters
         ----------
@@ -59,17 +65,16 @@ class Demonstration(object):
 
         Optional parameters
         -------------------
-        :param constant: boolean flag that specifies if the task parameter is constant (True) or if it is
-                    changing over time (False).
+        :param constant: boolean flag that specifies if the task parameter is constant (True) or if it is changing over time (False).
         """
         frame = []
         if constant:
-            frame.append(Frame(A, b))
+            frame.append(Frame(A, b, self.manifold))
         else:
             if len(A) != len(b) or len(A) != self.length:
                 raise RuntimeError("A and b must be lists of length %s if constant is False." % self.length)
             for t in range(len(A)):
-                frame.append(Frame(A[t], b[t]))
+                frame.append(Frame(A[t], b[t], self.manifold))
         self.add_frame(frame, name)
 
     def add_frame(self, frame, name):
@@ -86,19 +91,19 @@ class Demonstration(object):
         if isinstance(frame, Frame):
             frame = [frame]
         if name in self._task_parameters:
-            Warning("[Demonstration] This frame name already exists. The frame has been overwritten.")
+            Warning("[Demonstrations] This frame name already exists. The frame has been overwritten.")
         self._task_parameters[name] = frame
         if self._traj_in_frames is None:
             self.traj_in_frames  # just to invoke compute traj in frames
         else:
-            traj = self._transform_traj(name)
-            traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.sampling_time, smooth=self.smooth)
+            traj = self._pullback_traj(name)
+            traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.dt, manifold=self.manifold, smooth=self.smooth)
             # NOTE: this is inefficient computation for now. TODO: we should be able to transform velocity and accelerations between frames
             self._traj_in_frames[name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
 
-    def _transform_traj(self, f_name):
+    def _pullback_traj(self, f_name):
         if f_name not in self._task_parameters:
-            raise RuntimeError("[Demonstration] Frame %s not in task parameters!" % f_name)
+            raise RuntimeError("[Demonstrations] Frame %s not in task parameters!" % f_name)
         if len(self._task_parameters[f_name]) == 1:  # constant frame
             transformed_traj = self._task_parameters[f_name][0].pullback(self.traj)
         else:  # time-varying frame
@@ -116,16 +121,18 @@ class Demonstration(object):
     def traj(self, value):
         if isinstance(value, list):
             value = np.array(value).T
-        traj, d_traj, dd_traj = compute_traj_derivatives(value, dt=self.sampling_time, smooth=self.smooth)
+        traj, d_traj, dd_traj = compute_traj_derivatives(value, dt=self.dt, manifold=self.manifold, smooth=self.smooth)
         self._traj = traj
         self._d_traj = d_traj
         self._dd_traj = dd_traj
         self._dim_M, self._length = self._traj.shape
+        if self._dim_M != self._manifold.dim_M:
+            raise RuntimeError('[Demonstrations] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, self._manifold.dim_M))
         self._traj_in_frames = None
 
     @property
-    def sampling_time(self):
-        return self._sampling_time
+    def dt(self):
+        return self._dt
 
     @property
     def dim_M(self):
@@ -148,8 +155,8 @@ class Demonstration(object):
         if self._traj_in_frames is None:
             self._traj_in_frames = dict()
             for f_name in self._task_parameters:
-                traj = self._transform_traj(f_name)
-                traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.sampling_time, smooth=self.smooth)
+                traj = self._pullback_traj(f_name)
+                traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.dt, smooth=self.smooth)
                 # NOTE: this is inefficient computation for now. TODO: we should be able to transform velocity and accelerations between frames
                 self._traj_in_frames[f_name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
         return self._traj_in_frames

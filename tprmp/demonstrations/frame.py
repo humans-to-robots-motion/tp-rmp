@@ -1,20 +1,29 @@
 import numpy as np
+import logging
+
+from tprmp.demonstrations.manifold import Manifold
+logger = logging.getLogger(__name__)
 
 
 class Frame(object):
-    def __init__(self, A, b):
+    def __init__(self, A, b, manifold=None):
         """
-        Candidate frame given by orientation A and origin b.
+        Candidate frame given by linear map with Jacobians A and displacement b.
 
         :param A: np.array of shape (dim_T, dim_T), rotation in tangent space
         :param b: np.array of shape (dim_M,), translation in manifold space
-        TODO: Add manifolds framing
         """
         if A.shape[1] != A.shape[0]:
             raise RuntimeError("Expected A to be a square matrix and not %s." % A.shape)
         self._A = A
         self._A_inv = None
+        if manifold is None:
+            manifold = Manifold.get_euclidean_manifold(b.shape[0])
+        if manifold.dim_T != A.shape[0] or manifold.dim_M != b.shape[0]:
+            raise RuntimeError("Expected a manifold with dim_T = %s and dim_M = %s to match the dimensions of A"
+                               " and b." % (A.shape[0], b.shape[0]))
         self._b = b
+        self._manifold = manifold
 
     def transform(self, x):
         """
@@ -28,7 +37,7 @@ class Frame(object):
         -------
         :return xi: np.array of shape (dim_M,)
         """
-        return self.A.dot(x) + self.b
+        return self._manifold.exp_map(self.A.dot(self._manifold.log_map(x)), base=self.b)
 
     def pullback(self, xi):
         """
@@ -42,7 +51,7 @@ class Frame(object):
         -------
         :return x: np.array of shape (dim_M,)
         """
-        return self.A_inv.dot(xi - self.b)
+        return self._manifold.exp_map(self.A_inv.dot(self._manifold.log_map(xi, base=self.b)))
 
     @property
     def A(self):
@@ -57,3 +66,7 @@ class Frame(object):
     @property
     def b(self):
         return self._b
+
+    @property
+    def manifold(self):
+        return self._manifold

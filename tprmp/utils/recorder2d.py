@@ -1,15 +1,16 @@
 import os
+from os.path import join, dirname, realpath
 import pickle
 import time
 
-_path_file = os.path.dirname(os.path.realpath(__file__))
+_path_file = dirname(realpath(__file__))
 
 
 class Recorder2D:
     def __init__(self, plot, task_name='test'):
-        self.save_path = os.path.join(_path_file, '..', '..', 'data', 'tasks', task_name, 'demos')
+        self.save_path = join(_path_file, '..', '..', 'data', 'tasks', task_name, 'demos')
         os.makedirs(self.save_path, exist_ok=True)
-        self.save_name = os.path.join(self.save_path, task_name + str(time.time()) + '.p')
+        self.save_name = join(self.save_path, task_name + str(time.time()) + '.p')
         self.plot = plot
         self.trajs = []
         self.curr_traj_x = []

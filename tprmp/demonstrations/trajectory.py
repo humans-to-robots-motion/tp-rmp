@@ -1,8 +1,9 @@
 import numpy as np
-# TODO: add manifolds
+
+from tprmp.demonstrations.manifold import Manifold
 
 
-def compute_traj_derivatives(traj, dt, smooth=False):
+def compute_traj_derivatives(traj, dt, manifold=None, smooth=False):
     """
     Estimate the trajectory dynamics.
 
@@ -17,9 +18,13 @@ def compute_traj_derivatives(traj, dt, smooth=False):
     :return d_traj (np.array of shape (dim_T, length)): first derivative of traj.
     :return dd_traj (np.array of shape (dim_T, length)): second derivative of traj.
     """
+    dim_M = traj.shape[0]
+    if not manifold:
+        # if no manifold specified, Euclidean manifold is used.
+        manifold = Manifold.get_euclidean_manifold(dim_M)
     # smoothing first
     if smooth:
-        traj = smooth_traj(traj)
+        traj = smooth_traj(traj, manifold=manifold)
     # compute derivatives
     d_traj = compute_traj_velocity(traj, dt)
     dd_traj = compute_traj_velocity(d_traj, dt)
@@ -29,7 +34,7 @@ def compute_traj_derivatives(traj, dt, smooth=False):
     return traj, d_traj, dd_traj
 
 
-def smooth_traj(traj, window_length=30, beta=14):
+def smooth_traj(traj, manifold=None, window_length=30, beta=14):
     """
     Smooth the pose using the kaiser window np.kaiser(window_length, beta).
 
@@ -44,19 +49,23 @@ def smooth_traj(traj, window_length=30, beta=14):
     :return smooth_traj (np.array of shape (M, length)): pose trajectory after smoothing.
     """
     dim_M, length = traj.shape[:]
+    if not manifold:
+        manifold = Manifold.get_euclidean_manifold(dim_M)
+    if dim_M != manifold.dim_M:
+        raise ValueError('[Trajectory]: Input X shape %s is not consistent with manifold.dim_M %s' % (dim_M, manifold.dim_M))
     # apply kaiser filter
     half_wl = int(window_length / 2)
     window = np.kaiser(2 * half_wl, beta)
     smooth_traj = traj.copy()
     for t in range(length):
         weights = window[max(half_wl - t, 0):(2 * half_wl - max(0, t + half_wl - length))]
-        smooth_traj[:, t] = np.average(smooth_traj[:, max(t - half_wl, 0):(t + half_wl)], weights=weights, axis=1)
+        smooth_traj[:, t] = manifold.mean(smooth_traj[:, max(t - half_wl, 0):(t + half_wl)], weights=weights)
     if smooth_traj.shape != traj.shape:
-        raise ValueError('[trajectory]: Shape of smoothed_traj is different from input traj')
+        raise ValueError('[Trajectory]: Shape of smoothed_traj is different from input traj')
     return smooth_traj
 
 
-def compute_traj_velocity(traj, dt):
+def compute_traj_velocity(traj, dt, manifold=None):
     """
     Estimate the first derivative of input trajectory traj.
 
@@ -70,15 +79,24 @@ def compute_traj_velocity(traj, dt):
     :return d_traj (np.array of shape (dim_T, length)): first derivative of traj.
     """
     dim_M, length = traj.shape[:]
+    if not manifold:
+        manifold = Manifold.get_euclidean_manifold(dim_M)
+    if dim_M != manifold.dim_M:
+        raise ValueError('[Trajectory]: Input X shape %s is not consistent with manifold.dim_M %s' % (dim_M, manifold.dim_M))
     # estimate d_traj
     d_traj = []
     for t in range(length - 1):
-        d_traj_t = (traj[:, t + 1] - traj[:, t]) / dt
+        d_traj_t = manifold.log_map(traj[:, t + 1], base=traj[:, t]) / dt
         d_traj.append(d_traj_t)
-    # copy the second last entry, to ensure d_traj has the same length as traj
     d_traj.append(d_traj_t)
     d_traj = np.array(d_traj).T
+    names = np.array(manifold.name.split(' x '))
+    if 'S^3' in names:
+        indices = np.where(names == 'S^3')[0]
+        for i in indices:
+            d_traj[i * 3:i * 3 + 3] *= 2  # convert to angular
+    if d_traj.shape[0] != manifold.dim_T:
+        raise ValueError('[Trajectory]: d_traj shape %s is not consistent with manifold.dim_T %s' % (d_traj.shape[0], manifold.dim_T))
     if d_traj.shape[1] != length:
-        raise ValueError('[trajectory]: Length of d_traj %s is not consistent with input traj length '
-                         '%s' % (d_traj.shape[1], length))
+        raise ValueError('[Trajectory]: Length of d_traj %s is not consistent with input traj length %s' % (d_traj.shape[1], length))
     return d_traj
