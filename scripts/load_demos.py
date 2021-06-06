@@ -6,7 +6,7 @@ from os.path import join, dirname, abspath
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
-from tprmp.utils.load_demos import load_demos  # noqa
+from tprmp.utils.loading import load_demos  # noqa
 from tprmp.demonstrations.trajectory import compute_traj_derivatives  # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,

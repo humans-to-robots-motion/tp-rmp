@@ -30,9 +30,7 @@ def q_log_map(q, base=None):
         acos[np.where(q_non_singular[0, :] < 0)] += -np.pi  # q and -q maps are the same
         v = np.zeros((3, q_2d.shape[1]))
         v[:, non_0] = q_non_singular[1:, :] * np.tile(acos / norm_q[non_0], (3, 1))
-        if len(q.shape) == 1:
-            return v.reshape(3)
-        return v
+        return v.reshape(3) if len(q.shape) == 1 else v
     else:
         return q_log_map(q_mul(q_inverse(base), q))
 
@@ -134,11 +132,11 @@ def q_to_euler(q):
     t4 = 1.0 - 2.0 * (y * y + z * z)
     yaw = np.arctan2(t3, t4)
     euler = np.stack([roll, pitch, yaw], axis=0)
-    return euler
+    return np.squeeze(euler)
 
 
 def q_from_euler(euler):
-    euler_2d = euler.reshape((4, 1)) if len(euler.shape) == 1 else euler
+    euler_2d = euler.reshape((3, 1)) if len(euler.shape) == 1 else euler
     roll, pitch, yaw = euler_2d[0, :], euler_2d[1, :], euler_2d[2, :]
     cy = np.cos(yaw * 0.5)
     sy = np.sin(yaw * 0.5)
@@ -151,10 +149,16 @@ def q_from_euler(euler):
     y = cr * sp * cy + sr * cp * sy
     z = cr * cp * sy - sr * sp * cy
     q = np.stack([w, x, y, z], axis=0)
-    return q
+    return np.squeeze(q)
 
 
 def q_convert_xyzw(q):
     q_2d = q.reshape((4, 1)) if len(q.shape) == 1 else q
     w, x, y, z = q_2d[0, :], q_2d[1, :], q_2d[2, :], q_2d[3, :]
-    return np.stack([x, y, z, w], axis=0)
+    return np.squeeze(np.stack([x, y, z, w], axis=0))
+
+
+def q_convert_wxyz(q):
+    q_2d = q.reshape((4, 1)) if len(q.shape) == 1 else q
+    x, y, z, w = q_2d[0, :], q_2d[1, :], q_2d[2, :], q_2d[3, :]
+    return np.squeeze(np.stack([w, x, y, z], axis=0))

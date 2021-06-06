@@ -12,7 +12,7 @@ class LowTri:
         self._m = m
         self._idx = np.tril_indices(self._m)
 
-    def __call__(self, l):
+    def __call__(self, l):  # noqa
         batch_size = l.shape[0]
         self._L = torch.zeros(batch_size, self._m, self._m).type_as(l)
 
@@ -131,25 +131,24 @@ class DeepRMPNetwork(nn.Module):
         self._g_output = kwargs.get("g_hidden", 0.125)
         self._p_sparse = kwargs.get("p_sparse", 0.2)
         self._epsilon = kwargs.get("diagonal_epsilon", 1.e-5)
-
         # Construct Weight Initialization:
         if self._w_init == "xavier_normal":
-
             # Construct initialization function:
             def init_hidden(layer):
-
                 # Set the Hidden Gain:
-                if self._g_hidden <= 0.0: hidden_gain = torch.nn.init.calculate_gain('relu')
-                else: hidden_gain = self._g_hidden
-
+                if self._g_hidden <= 0.0:
+                    hidden_gain = torch.nn.init.calculate_gain('relu')
+                else:
+                    hidden_gain = self._g_hidden
                 torch.nn.init.constant_(layer.bias, self._b0)
                 torch.nn.init.xavier_normal_(layer.weight, hidden_gain)
 
             def init_output(layer):
                 # Set Output Gain:
-                if self._g_output <= 0.0: output_gain = torch.nn.init.calculate_gain('linear')
-                else: output_gain = self._g_output
-
+                if self._g_output <= 0.0:
+                    output_gain = torch.nn.init.calculate_gain('linear')
+                else:
+                    output_gain = self._g_output
                 torch.nn.init.constant_(layer.bias, self._b0)
                 torch.nn.init.xavier_normal_(layer.weight, output_gain)
 
@@ -158,16 +157,20 @@ class DeepRMPNetwork(nn.Module):
             # Construct initialization function:
             def init_hidden(layer):
                 # Set the Hidden Gain:
-                if self._g_hidden <= 0.0: hidden_gain = torch.nn.init.calculate_gain('relu')
-                else: hidden_gain = self._g_hidden
+                if self._g_hidden <= 0.0:
+                    hidden_gain = torch.nn.init.calculate_gain('relu')
+                else:
+                    hidden_gain = self._g_hidden
 
                 torch.nn.init.constant_(layer.bias, self._b0)
                 torch.nn.init.orthogonal_(layer.weight, hidden_gain)
 
             def init_output(layer):
                 # Set Output Gain:
-                if self._g_output <= 0.0: output_gain = torch.nn.init.calculate_gain('linear')
-                else: output_gain = self._g_output
+                if self._g_output <= 0.0:
+                    output_gain = torch.nn.init.calculate_gain('linear')
+                else:
+                    output_gain = self._g_output
 
                 torch.nn.init.constant_(layer.bias, self._b0)
                 torch.nn.init.orthogonal_(layer.weight, output_gain)
@@ -281,7 +284,7 @@ class DeepRMPNetwork(nn.Module):
 
         # Assemble l and der_l
         l_diag = l_diag
-        l = torch.cat((l_diag, l_lower), 1)[:, self._idx]
+        l = torch.cat((l_diag, l_lower), 1)[:, self._idx]  # noqa
         der_l = torch.cat((der_l_diag, der_l_lower), 1)[:, self._idx, :]
 
         # Compute M:
