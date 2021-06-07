@@ -114,7 +114,8 @@ class PalletizingBoxes(Task):
             stack_dim = np.random.randint(low=2, high=4, size=3)
         else:
             stack_dim = np.int32([2, 3, 3])
-        box_size = (stack_size - (stack_dim - 1) * margin) / stack_dim
+        self.box_size = (stack_size - (stack_dim - 1) * margin) / stack_dim
+        box_size = copy.copy(self.box_size)
         for z in range(stack_dim[2]):
             # Transpose every layer.
             stack_dim[0], stack_dim[1] = stack_dim[1], stack_dim[0]
@@ -151,10 +152,9 @@ class PalletizingBoxes(Task):
 
     def reward(self):
         reward, info = super().reward()
-        self.spawn_box()
         return reward, info
 
-    def spawn_box(self, wait=500):
+    def spawn_box(self, wait=50):
         """Palletizing: spawn another box in the workspace if it is empty."""
         workspace_empty = True
         if self.goals:

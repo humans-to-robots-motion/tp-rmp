@@ -2,9 +2,11 @@ from os.path import join, dirname, realpath
 import tempfile
 import logging
 from tprmp.demonstrations.manifold import Manifold
+from tprmp.demonstrations.quaternion import q_convert_wxyz, q_convert_xyzw
 import gym
 import numpy as np
 import pybullet as p
+import time
 
 _path_file = dirname(realpath(__file__))
 ASSETS_PATH = join(_path_file, '..', '..', 'data', 'assets')
@@ -41,7 +43,6 @@ class Environment(gym.Env):
         disp = kwargs.get('disp', False)
         shared_memory = kwargs.get('shared_memory', False)
         self.sampling_hz = kwargs.get('sampling_hz', 100)
-        self.sim_hz = kwargs.get('sim_hz', 200)
         self.manifold = kwargs.get('manifold', None)
         if self.manifold is None:
             self.manifold = Manifold.get_manifold_from_name('R^3 x S^3')  # 6-DoFs
@@ -97,7 +98,7 @@ class Environment(gym.Env):
         p.setPhysicsEngineParameter(enableFileCaching=0)
         p.setAdditionalSearchPath(ASSETS_PATH)
         p.setAdditionalSearchPath(tempfile.gettempdir())
-        p.setTimeStep(1. / self.sim_hz)
+        p.setTimeStep(1. / self.sampling_hz)
         # If using --disp, move default camera closer to the scene.
         if disp:
             target = p.getDebugVisualizerCamera()[11]
@@ -119,15 +120,38 @@ class Environment(gym.Env):
         self.obj_ids[category].append(obj_id)
         return obj_id
 
-    def movep(self, pose):  # TODO: test this
+    def movej(self, targj, speed=0.01, timeout=5):
+        """Move UR5 to target joint configuration."""
+        t0 = time.time()
+        while (time.time() - t0) < timeout:
+            currj = [p.getJointState(self.ur5, i)[0] for i in self.joints]
+            currj = np.array(currj)
+            diffj = targj - currj
+            if all(np.abs(diffj) < 1e-2):
+                return False
+            # Move with constant velocity  #TODO:  implement variated velocity if needed
+            norm = np.linalg.norm(diffj)
+            v = diffj / norm if norm > 0 else 0
+            stepj = currj + v * speed
+            gains = np.ones(len(self.joints))
+            p.setJointMotorControlArray(bodyIndex=self.ur5,
+                                        jointIndices=self.joints,
+                                        controlMode=p.POSITION_CONTROL,
+                                        targetPositions=stepj,
+                                        positionGains=gains)
+            p.stepSimulation()
+        Environment.logger.warn(f'movej exceeded {timeout} second timeout. Skipping.')
+        return True
+
+    def movep(self, pose, speed=0.01):
         """Move UR5 to target end effector pose."""
         targj = self.solve_ik(pose)
-        gains = np.ones(len(self.joints))  # NOTE: default gains. This should be changed in the future for impedance control
-        p.setJointMotorControlArray(bodyIndex=self.ur5,
-                                    jointIndices=self.joints,
-                                    controlMode=p.POSITION_CONTROL,
-                                    targetPositions=targj,
-                                    positionGains=gains)
+        return self.movej(targj, speed)
+
+    def setp(self, pose):
+        targj = self.solve_ik(pose)
+        for i in range(len(self.joints)):
+            p.resetJointState(self.ur5, self.joints[i], targj[i])
         p.stepSimulation()
 
     def solve_ik(self, pose):
@@ -181,10 +205,14 @@ class Environment(gym.Env):
         # Re-enable rendering.
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
         obs, _, _, _ = self.step()
+        self.home_pose = obs['ee_pose']
+        # a hack to bypass computing Jacobian at step(), these variables are perfect state tracking
+        self._ee_pose = obs['ee_pose']
+        self._ee_vel = np.zeros(6, dtype=np.float32)
         return obs
 
     def step(self, action=None):
-        """Execute action with specified primitive.
+        """Execute action with acceleration.
             Parameters
             ----------
             :param action: action to execute.
@@ -194,12 +222,14 @@ class Environment(gym.Env):
         """
         if action is None:
             return self.robot_state, 0, False, {}
-        state = self.robot_state
-        ee, ee_vel = state['ee'], state['ee_vel']
-        for _ in range(int(self.sim_hz / self.sampling_hz)):
-            ee_vel += action / self.sampling_hz
-            ee = self.manifold.exp_map(ee_vel, base=ee)
-            self.movep(ee)
+        ee, ee_vel = self.ee_pose, self.ee_vel  # NOTE: self.ee_vel is a hack to bypass computing Jacobian
+        ee_vel += action / self.sampling_hz
+        ee_wxyz = np.append(ee[:3], q_convert_wxyz(ee[3:]))
+        ee_wxyz = self.manifold.exp_map(ee_vel, base=ee_wxyz)
+        ee = np.append(ee_wxyz[:3], q_convert_xyzw(ee_wxyz[3:]))
+        self.setp(ee)
+        self._ee_pose = ee
+        self._ee_vel = ee_vel
         # Get task rewards.
         reward, info = self.task.reward() if action is not None else (0, {})
         done = self.task.done()
@@ -288,5 +318,13 @@ class Environment(gym.Env):
         config_state = [p.getJointState(self.ur5, i) for i in self.joints]
         config = np.array([config_state[i][0] for i in range(len(config_state))])
         config_vel = np.array([config_state[i][1] for i in range(len(config_state))])
-        state = {'ee': ee, 'ee_vel': ee_vel, 'config': config, 'config_vel': config_vel}
+        state = {'ee_pose': ee, 'ee_vel': ee_vel, 'config': config, 'config_vel': config_vel}
         return state
+
+    @property
+    def ee_pose(self):
+        return self._ee_pose
+
+    @property
+    def ee_vel(self):
+        return self._ee_vel
