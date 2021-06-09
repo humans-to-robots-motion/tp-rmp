@@ -1,12 +1,14 @@
 from os.path import join, dirname, realpath
 import tempfile
 import logging
-from tprmp.demonstrations.manifold import Manifold
-from tprmp.demonstrations.quaternion import q_convert_wxyz, q_convert_xyzw
 import gym
 import numpy as np
 import pybullet as p
 import time
+
+from tprmp.demonstrations.manifold import Manifold
+from tprmp.demonstrations.quaternion import q_convert_wxyz, q_convert_xyzw
+from tprmp.utils.threading import threaded
 
 _path_file = dirname(realpath(__file__))
 ASSETS_PATH = join(_path_file, '..', '..', 'data', 'assets')
@@ -33,8 +35,7 @@ class Environment(gym.Env):
             :param disp: show environment with PyBullet's built-in display viewer.
             :param shared_memory: run with shared memory.
             :param manifold: manifold of task space
-            :param sampling_hz: Sampling freq. Must be always < sim_hz and divisible to sim_hz.
-            :param sim_hz: PyBullet physics simulation step speed. Set to 480 for deformables.
+            :param sampling_hz: Sampling freq.
             Raises:
             -------
             RuntimeError: if pybullet cannot load fileIOPlugin.
@@ -43,10 +44,12 @@ class Environment(gym.Env):
         disp = kwargs.get('disp', False)
         shared_memory = kwargs.get('shared_memory', False)
         self.sampling_hz = kwargs.get('sampling_hz', 100)
+        self.real_time_step = kwargs.get('real_time_step', False)
         self.manifold = kwargs.get('manifold', None)
         if self.manifold is None:
             self.manifold = Manifold.get_manifold_from_name('R^3 x S^3')  # 6-DoFs
         self.home_joint = np.array([-1, -0.5, 0.5, -0.5, -0.5, 0], dtype=np.float32) * np.pi
+        self.moving = False  # this flag for recording trajectory
         self.observation_space = gym.spaces.Dict({
             'ee':  # position and normalized quaternion
             gym.spaces.Box(low=np.array([0., 0., 0., -1., -1., -1., -1.], dtype=np.float32),
@@ -101,6 +104,8 @@ class Environment(gym.Env):
         p.setTimeStep(1. / self.sampling_hz)
         # If using --disp, move default camera closer to the scene.
         if disp:
+            if self.real_time_step:
+                p.setRealTimeSimulation(1)
             target = p.getDebugVisualizerCamera()[11]
             p.resetDebugVisualizerCamera(cameraDistance=1.1,
                                          cameraYaw=90,
@@ -120,39 +125,55 @@ class Environment(gym.Env):
         self.obj_ids[category].append(obj_id)
         return obj_id
 
-    def movej(self, targj, speed=0.01, timeout=5):
+    def movej(self, targj, speed=0.01, timeout=5, direct=False):
         """Move UR5 to target joint configuration."""
-        t0 = time.time()
-        while (time.time() - t0) < timeout:
-            currj = [p.getJointState(self.ur5, i)[0] for i in self.joints]
-            currj = np.array(currj)
-            diffj = targj - currj
-            if all(np.abs(diffj) < 1e-2):
-                return False
-            # Move with constant velocity  #TODO:  implement variated velocity if needed
-            norm = np.linalg.norm(diffj)
-            v = diffj / norm if norm > 0 else 0
-            stepj = currj + v * speed
+        self.moving = True
+        if direct:  # should work with RealTimeSimulation
             gains = np.ones(len(self.joints))
             p.setJointMotorControlArray(bodyIndex=self.ur5,
                                         jointIndices=self.joints,
                                         controlMode=p.POSITION_CONTROL,
-                                        targetPositions=stepj,
+                                        targetPositions=targj,
                                         positionGains=gains)
-            p.stepSimulation()
-        Environment.logger.warn(f'movej exceeded {timeout} second timeout. Skipping.')
-        return True
+            self.moving = False
+            return True
+        else:
+            t0 = time.time()
+            while (time.time() - t0) < timeout:
+                currj = [p.getJointState(self.ur5, i)[0] for i in self.joints]
+                currj = np.array(currj)
+                diffj = targj - currj
+                if all(np.abs(diffj) < 1e-2):
+                    self.moving = False
+                    return True
+                # Move with constant velocity  #TODO:  implement variated velocity if needed
+                norm = np.linalg.norm(diffj)
+                v = diffj / norm if norm > 0 else 0
+                stepj = currj + v * speed
+                gains = np.ones(len(self.joints))
+                p.setJointMotorControlArray(bodyIndex=self.ur5,
+                                            jointIndices=self.joints,
+                                            controlMode=p.POSITION_CONTROL,
+                                            targetPositions=stepj,
+                                            positionGains=gains)
+                if not self.real_time_step:
+                    p.stepSimulation()
+            Environment.logger.warn(f'movej exceeded {timeout} second timeout. Skipping.')
+            self.moving = False
+            return False
 
-    def movep(self, pose, speed=0.01):
+    def movep(self, pose, speed=0.01, timeout=5, direct=False):
         """Move UR5 to target end effector pose."""
         targj = self.solve_ik(pose)
-        return self.movej(targj, speed)
+        return self.movej(targj, speed, timeout, direct)
 
     def setp(self, pose):
+        """This should work with p.stepSimulation()"""
         targj = self.solve_ik(pose)
         for i in range(len(self.joints)):
             p.resetJointState(self.ur5, self.joints[i], targj[i])
-        p.stepSimulation()
+        if not self.real_time_step:
+            p.stepSimulation()
 
     def solve_ik(self, pose):
         """Calculate joint configuration with inverse kinematics."""
@@ -292,6 +313,26 @@ class Environment(gym.Env):
         # Get segmentation image.
         segm = np.uint8(segm).reshape(depth_image_size)
         return color, depth, segm
+
+    @threaded
+    def record_trajectory(self):
+        '''This function works with self.movep()'''
+        traj = []
+        traj_vel = []
+        # wait for robot to move
+        while not self.moving:
+            pass
+        while self.moving:
+            state = self.robot_state
+            traj.append(state['ee_pose'])
+            traj_vel.append(state['ee_vel'])
+            # time.sleep(1 / self.sampling_hz)
+        traj = np.vstack(traj).T
+        traj_vel = np.vstack(traj_vel).T
+        # record traj at self.sampling_hz
+        traj = traj[:, ::self.sampling_hz]
+        traj_vel = traj_vel[:, ::self.sampling_hz]
+        return traj, traj_vel
 
     @property
     def is_static(self):

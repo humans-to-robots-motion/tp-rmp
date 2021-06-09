@@ -1,11 +1,16 @@
 import numpy as np
+import logging
+from scipy.linalg import block_diag
 
+from tprmp.demonstrations.quaternion import q_to_rotation_matrix
 from tprmp.demonstrations.frame import Frame
 from tprmp.demonstrations.manifold import Manifold
 from tprmp.demonstrations.trajectory import compute_traj_derivatives
 
 
 class Demonstrations(object):
+    logger = logging.getLogger(__name__)
+
     def __init__(self, traj, manifold=None, dt=0.1, smooth=False):
         """
         Parameters
@@ -91,7 +96,7 @@ class Demonstrations(object):
         if isinstance(frame, Frame):
             frame = [frame]
         if name in self._task_parameters:
-            Warning("[Demonstrations] This frame name already exists. The frame has been overwritten.")
+            Demonstrations.logger.warn('This frame name already exists. The frame has been overwritten.')
         self._task_parameters[name] = frame
         if self._traj_in_frames is None:
             self.traj_in_frames  # just to invoke compute traj in frames
@@ -100,6 +105,47 @@ class Demonstrations(object):
             traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.dt, manifold=self.manifold, smooth=self.smooth)
             # NOTE: this is inefficient computation for now. TODO: we should be able to transform velocity and accelerations between frames
             self._traj_in_frames[name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
+
+    def create_frame_from_obj_pose(self, pose):
+        """
+        Create single frame from the corresponding object pose.
+
+        Parameters
+        ----------
+        :param pose: np.array([x,y,z, w,x,y,z]).
+
+        Returns
+        ----------
+        :return frame (Frame object): with the correponded manifold of this demonstration.
+        """
+        A, b = self.construct_linear_map(pose)
+        frame = Frame(A, b, manifold=self._manifold)
+        return frame
+
+    def construct_linear_map(self, pose):
+        """
+        Construct orientation matrix A and translation vector b from pose.
+
+        Parameters
+        ----------
+        :param pose: np.array([x,y,z, w,x,y,z]).
+
+        Returns
+        ----------
+        :return A (np.array): rotation in tangent space
+        :return b (np.array): translation in manifold space
+        """
+        if self._manifold.name == 'R^3 x S^3':
+            q_rot_mat = q_to_rotation_matrix(pose[3:])
+            A = block_diag(q_rot_mat, np.eye(3))
+            b = pose
+        elif 'S^3' not in self._manifold.name and 'R^' in self._manifold.name:  # pure Euclidean
+            A = np.eye(self._manifold.dim_M)
+            b = pose
+        else:
+            Demonstrations.logger.warn(f'Manifold name {self._manifold.name} is not recognized! Return no linear map.')
+            return
+        return A, b
 
     def _pullback_traj(self, f_name):
         if f_name not in self._task_parameters:
