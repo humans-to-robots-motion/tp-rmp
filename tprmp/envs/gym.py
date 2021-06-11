@@ -51,7 +51,7 @@ class Environment(gym.Env):
         self.home_joint = np.array([-1, -0.5, 0.5, -0.5, -0.5, 0], dtype=np.float32) * np.pi
         self.moving = False  # this flag for recording trajectory
         self.observation_space = gym.spaces.Dict({
-            'ee':  # position and normalized quaternion
+            'ee_pose':  # position and normalized quaternion
             gym.spaces.Box(low=np.array([0., 0., 0., -1., -1., -1., -1.], dtype=np.float32),
                            high=np.array([5., 5., 5., 1., 1., 1., 1.], dtype=np.float32),
                            shape=(7,),

@@ -101,9 +101,7 @@ class Demonstrations(object):
         if self._traj_in_frames is None:
             self.traj_in_frames  # just to invoke compute traj in frames
         else:
-            traj = self._pullback_traj(name)
-            traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.dt, manifold=self.manifold, smooth=self.smooth)
-            # NOTE: this is inefficient computation for now. TODO: we should be able to transform velocity and accelerations between frames
+            traj, d_traj, dd_traj = self._pullback_traj(name)
             self._traj_in_frames[name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
 
     def create_frame_from_obj_pose(self, pose):
@@ -152,12 +150,16 @@ class Demonstrations(object):
             raise RuntimeError("[Demonstrations] Frame %s not in task parameters!" % f_name)
         if len(self._task_parameters[f_name]) == 1:  # constant frame
             transformed_traj = self._task_parameters[f_name][0].pullback(self.traj)
+            transformed_d_traj = self._task_parameters[f_name][0].pullback_tangent(self._d_traj)
+            transformed_dd_traj = self._task_parameters[f_name][0].pullback_tangent(self._dd_traj)
         else:  # time-varying frame
             transformed_traj = np.array(self.dim, self.length)
             for t in range(self._length):
                 current_frame = self.get_task_parameters(t, f_name)
                 transformed_traj[:, t] = current_frame.pullback(self.traj[:, t])
-        return transformed_traj
+                transformed_d_traj = current_frame.pullback_tangent(self._d_traj[:, t])  # TODO: check if this is correct
+                transformed_dd_traj = current_frame.pullback_tangent(self._dd_traj[:, t])
+        return transformed_traj, transformed_d_traj, transformed_dd_traj
 
     @property
     def traj(self):
@@ -201,8 +203,6 @@ class Demonstrations(object):
         if self._traj_in_frames is None:
             self._traj_in_frames = dict()
             for f_name in self._task_parameters:
-                traj = self._pullback_traj(f_name)
-                traj, d_traj, dd_traj = compute_traj_derivatives(traj, dt=self.dt, smooth=self.smooth)
-                # NOTE: this is inefficient computation for now. TODO: we should be able to transform velocity and accelerations between frames
+                traj, d_traj, dd_traj = self._pullback_traj(f_name)
                 self._traj_in_frames[f_name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
         return self._traj_in_frames

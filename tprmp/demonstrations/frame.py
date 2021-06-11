@@ -31,11 +31,11 @@ class Frame(object):
 
         Parameters
         ----------
-        :param x: np.array of shape (dim_M,)
+        :param x: np.array of shape (dim_M, t)
 
         Returns
         -------
-        :return xi: np.array of shape (dim_M,)
+        :return xi: np.array of shape (dim_M, t)
         """
         return self._manifold.exp_map(self.A.dot(self._manifold.log_map(x)), base=self.b)
 
@@ -45,13 +45,41 @@ class Frame(object):
 
         Parameters
         ----------
+        :param xi: np.array of shape (dim_M, t)
+
+        Returns
+        -------
+        :return x: np.array of shape (dim_M, t)
+        """
+        return self._manifold.exp_map(self.A_inv.dot(self._manifold.log_map(xi, base=self.b)))
+
+    def transform_tangent(self, x):
+        """
+        Transforms tangent vectors x from this frame to global frame.  # NOTE: only work with static frame
+
+        Parameters
+        ----------
+        :param x: np.array of shape (dim_M, t)
+
+        Returns
+        -------
+        :return xi: np.array of shape (dim_M, t)
+        """
+        return self.A.dot(x)
+
+    def pullback_tangent(self, xi):
+        """
+        Transforms tangent vectors xi from global frame to this frame.  # NOTE: only work with static frame
+
+        Parameters
+        ----------
         :param xi: np.array of shape (dim_M,)
 
         Returns
         -------
         :return x: np.array of shape (dim_M,)
         """
-        return self._manifold.exp_map(self.A_inv.dot(self._manifold.log_map(xi, base=self.b)))
+        return self.A_inv.dot(xi)
 
     @property
     def A(self):

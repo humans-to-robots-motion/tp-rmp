@@ -26,7 +26,7 @@ def compute_traj_derivatives(traj, dt, manifold=None, smooth=False):
     if smooth:
         traj = smooth_traj(traj, manifold=manifold)
     # compute derivatives
-    d_traj = compute_traj_velocity(traj, dt)
+    d_traj = compute_traj_velocity(traj, dt, manifold=manifold)
     dd_traj = compute_traj_velocity(d_traj, dt)
     # copy the last 2 entries (corner case)
     dd_traj[:, -2] = dd_traj[:, -3]

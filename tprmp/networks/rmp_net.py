@@ -78,13 +78,13 @@ class CosDer(nn.Module):
 
 class LagrangianLayer(nn.Module):
 
-    def __init__(self, input_size, dim_M, activation="ReLu"):
+    def __init__(self, input_size, output_size, activation="ReLu"):
         super(LagrangianLayer, self).__init__()
 
         # Create layer weights and biases:
-        self.dim_M = dim_M
-        self.weight = nn.Parameter(torch.Tensor(dim_M, input_size))
-        self.bias = nn.Parameter(torch.Tensor(dim_M))
+        self.output_size = output_size
+        self.weight = nn.Parameter(torch.Tensor(output_size, input_size))
+        self.bias = nn.Parameter(torch.Tensor(output_size))
 
         # Initialize activation function and its derivative:
         if activation == "ReLu":
@@ -111,7 +111,7 @@ class LagrangianLayer(nn.Module):
         # Apply Affine Transformation:
         a = F.linear(q, self.weight, self.bias)
         out = self.g(a)
-        der = torch.matmul(self.g_prime(a).view(-1, self.dim_M, 1) * self.weight, der_prev)
+        der = torch.matmul(self.g_prime(a).view(-1, self.output_size, 1) * self.weight, der_prev)
         return out, der
 
 
@@ -198,14 +198,11 @@ class DeepRMPNetwork(nn.Module):
 
         # Compute In- / Output Sizes:
         self.dim_M = dim_M
-        self.m = int((dim_M ** 2 + dim_M) / 2)
+        self.m = int((self.dim_M ** 2 + self.dim_M) / 2)
 
         # Compute non-zero elements of L:
         l_output_size = int((self.dim_M ** 2 + self.dim_M) / 2)
         l_lower_size = l_output_size - self.dim_M
-
-        # Friction output size
-        b_output_size = self.dim_M ** 2
 
         # Calculate the indices of the diagonal elements of L:
         idx_diag = np.arange(self.dim_M) + 1
@@ -248,13 +245,9 @@ class DeepRMPNetwork(nn.Module):
         init_hidden(self.net_ld)
         torch.nn.init.constant_(self.net_ld.bias, self._b0_diag)
 
-        # Init friction matrix
-        self.net_B = LagrangianLayer(self.n_width, b_output_size, activation="Linear")
-        init_hidden(self.net_B)
-
     def forward(self, q, qd):
-        M, c, g, B, _, _, _ = self._dyn_model(q, qd)
-        return M, c, g, B
+        M, c, g, _, _, _ = self._dyn_model(q, qd)
+        return M, c, g
 
     def _dyn_model(self, q, qd):
         qd_3d = qd.view(-1, self.dim_M, 1)
@@ -272,10 +265,6 @@ class DeepRMPNetwork(nn.Module):
         # Compute the network heads including the corresponding derivative:
         l_lower, der_l_lower = self.net_lo(y, der)
         l_diag, der_l_diag = self.net_ld(y, der)
-
-        # Compute B
-        B, der_B = self.net_B(y, der)
-        B = B.view(-1, self.dim_M, self.dim_M)
 
         # Compute the potential energy and the gravitational force:
         V, der_V = self.net_g(y, der)
@@ -311,19 +300,19 @@ class DeepRMPNetwork(nn.Module):
 
         # Compute dV/dt
         dVdt = torch.matmul(qd_4d.transpose(dim0=2, dim1=3), g.view(-1, 1, self.dim_M, 1)).view(-1)
-        return M, c, g, B, T, V, dVdt
+        return M, c, g, T, V, dVdt
 
-    def rmp(self, q, qd):
-        M, c, g, B, _, _, _ = self._dyn_model(q, qd)
+    def rmp(self, q, qd, beta=0.5):  # beta is damping coefficient
+        M, c, g, _, _, _ = self._dyn_model(q, qd)
 
         # Compute Acceleration, e.g., forward model:
         invH = torch.inverse(M)
-        friction_term = torch.matmul(B, qd.view(-1, self.dim_M, 1)).view(-1, self.dim_M, 1)
-        qdd_pred = (torch.matmul(invH, (- c - g).view(-1, self.dim_M, 1)) + torch.matmul(invH, friction_term)).view(-1, self.dim_M)
+        # damping_term = beta * qd.view(-1, self.dim_M, 1)
+        qdd_pred = (torch.matmul(invH, (- c - g).view(-1, self.dim_M, 1))).view(-1, self.dim_M)
         return qdd_pred.squeeze()
 
     def energy(self, q, qd):
-        _, _, _, _, T, V, _ = self._dyn_model(q, qd)
+        _, _, _, T, V, _ = self._dyn_model(q, qd)
         E = T + V
         return E
 
