@@ -59,11 +59,11 @@ class Frame(object):
 
         Parameters
         ----------
-        :param x: np.array of shape (dim_M, t)
+        :param x: np.array of shape (dim_T, t)
 
         Returns
         -------
-        :return xi: np.array of shape (dim_M, t)
+        :return xi: np.array of shape (dim_T, t)
         """
         return self.A.dot(x)
 
@@ -73,11 +73,11 @@ class Frame(object):
 
         Parameters
         ----------
-        :param xi: np.array of shape (dim_M,)
+        :param xi: np.array of shape (dim_T, t)
 
         Returns
         -------
-        :return x: np.array of shape (dim_M,)
+        :return x: np.array of shape (dim_T, t)
         """
         return self.A_inv.dot(xi)
 

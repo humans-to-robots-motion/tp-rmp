@@ -157,7 +157,7 @@ class Demonstrations(object):
             for t in range(self._length):
                 current_frame = self.get_task_parameters(t, f_name)
                 transformed_traj[:, t] = current_frame.pullback(self.traj[:, t])
-                transformed_d_traj = current_frame.pullback_tangent(self._d_traj[:, t])  # TODO: check if this is correct
+                transformed_d_traj = current_frame.pullback_tangent(self._d_traj[:, t])
                 transformed_dd_traj = current_frame.pullback_tangent(self._dd_traj[:, t])
         return transformed_traj, transformed_d_traj, transformed_dd_traj
 
@@ -191,6 +191,14 @@ class Demonstrations(object):
         return self._length
 
     @property
+    def manifold(self):
+        return self._manifold
+
+    @property
+    def smooth(self):
+        return self._smooth
+
+    @property
     def nb_frames(self):
         return len(self._task_parameters)
 
@@ -206,3 +214,26 @@ class Demonstrations(object):
                 traj, d_traj, dd_traj = self._pullback_traj(f_name)
                 self._traj_in_frames[f_name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
         return self._traj_in_frames
+
+
+if __name__ == '__main__':
+    from tprmp.demonstrations.quaternion import q_from_euler
+    a = 1
+    omega = np.pi / 4
+    dt = 0.01
+    manifold = Manifold.get_manifold_from_name('R^3 x S^3')
+    t = np.array(range(0, 80, 1))
+    traj_accel = -a * omega**2 * np.outer(np.ones(6), np.cos(omega * t))
+    traj_vel = np.cumsum(traj_accel, axis=1) * dt
+    traj = [np.array([0, 0, 0, 1, 0, 0, 0])]
+    for i in t:
+        traj.append(manifold.exp_map(traj_vel[:, i], base=traj[-1]))
+    traj = np.vstack(traj).T
+    obj_pose = np.append(np.array([1, 1, 1]), q_from_euler(np.array([0, 0, np.pi/2])))
+    demo = Demonstrations(traj, manifold=manifold, dt=dt)
+    obj_frame = demo.create_frame_from_obj_pose(obj_pose)
+    demo.add_frame(obj_frame, 'obj')
+    obj_traj = obj_frame.pullback(traj)
+    obj_traj, obj_traj_vel, obj_traj_accel = compute_traj_derivatives(obj_traj, dt, manifold)
+    print(obj_traj_vel[:, 0])
+    print(demo.traj_in_frames['obj']['d_traj'][:, 0])
