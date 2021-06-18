@@ -18,7 +18,7 @@ t = 0
 a = 5.
 T = 500
 omega = 2 * np.pi / T
-margin = 0.001
+margin = 0.0009
 speed = 0.002
 
 # oscillate on y-axis one T
