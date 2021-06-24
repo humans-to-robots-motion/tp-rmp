@@ -8,14 +8,14 @@ from tprmp.demonstrations.manifold import Manifold
 from tprmp.demonstrations.trajectory import compute_traj_derivatives
 
 
-class Demonstrations(object):
+class Demonstration(object):
     logger = logging.getLogger(__name__)
 
-    def __init__(self, traj, manifold=None, dt=0.1, smooth=False):
+    def __init__(self, traj, **kwargs):
         """
         Parameters
         ----------
-        :param traj: np.array of shape (dim, length) or list of the points (np.array of shape (dim,)), contains the
+        :param traj: np.array of shape (dim_M, length) or list of the points (np.array of shape (dim_M,)), contains the
                      points of the trajectory in the global reference frame.
 
         Optional parameters
@@ -23,14 +23,14 @@ class Demonstrations(object):
         :param dt: float, the sampling time with which the demonstration was recorded
         """
         self._dim_M, self._length = traj.shape
-        if manifold is None:
-            manifold = Manifold.get_euclidean_manifold(self.dim)
+        manifold = kwargs.get('manifold', Manifold.get_euclidean_manifold(self.dim_M))
         self._manifold = manifold
         if self._dim_M != manifold.dim_M:
-            raise RuntimeError('[Demonstrations] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, manifold.dim_M))
-        self._smooth = smooth
+            raise RuntimeError('[Demonstration] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, manifold.dim_M))
+        self._smooth = kwargs.get('smooth', False)
+        self._dt = kwargs.get('dt', 0.1)
+        self._tag = kwargs.get('tag', None)
         self._task_parameters = dict()
-        self._dt = dt
         self.traj = traj
 
     def get_task_parameters(self, t=0, frame=None):
@@ -60,12 +60,12 @@ class Demonstrations(object):
 
         Parameters
         ----------
-        :param A: A = [A[0], A[1], ..., A[T]]  list of orientation matrices A[t] of shape (self.dim, self.dim)
+        :param A: A = [A[0], A[1], ..., A[T]]  list of orientation matrices A[t] of shape (self.dim_M, self.dim_M)
                     for each point in time with T=self.length if flag_constant==False. OR:
-                  A = orientation matrix of shape (self.dim, self.dim) if flag_constant==True
-        :param b: b = [b[0], b[1], ... , b[T]]  list of origin vector b[t] of shape (self.dim,) for each point in
+                  A = orientation matrix of shape (self.dim_M, self.dim_M) if flag_constant==True
+        :param b: b = [b[0], b[1], ... , b[T]]  list of origin vector b[t] of shape (self.dim_M,) for each point in
                     time with T=self.length if flag_constant==False. OR:
-                  b = origin vector of shape (self.dim,) if flag_constant==True
+                  b = origin vector of shape (self.dim_M,) if flag_constant==True
         :param name: str, the name of the frame
 
         Optional parameters
@@ -96,13 +96,25 @@ class Demonstrations(object):
         if isinstance(frame, Frame):
             frame = [frame]
         if name in self._task_parameters:
-            Demonstrations.logger.warn('This frame name already exists. The frame has been overwritten.')
+            Demonstration.logger.warn('This frame name already exists. The frame has been overwritten.')
         self._task_parameters[name] = frame
         if self._traj_in_frames is None:
             self.traj_in_frames  # just to invoke compute traj in frames
         else:
             traj, d_traj, dd_traj = self._pullback_traj(name)
             self._traj_in_frames[name] = {'traj': traj, 'd_traj': d_traj, 'dd_traj': dd_traj}
+
+    def add_frame_from_pose(self, poses, name):
+        """
+        This method adds a new task parameter to the demonstration for a given object pose(s).
+        """
+        if len(poses.shape) == 1:
+            poses = np.expand_dims(poses, axis=1)
+        dim_M, length = poses.shape
+        frames = []
+        for t in range(length):
+            frames.append(self.create_frame_from_obj_pose(poses[:, t]))
+        self.add_frame(frames, name)
 
     def create_frame_from_obj_pose(self, pose):
         """
@@ -141,19 +153,19 @@ class Demonstrations(object):
             A = np.eye(self._manifold.dim_M)
             b = pose
         else:
-            Demonstrations.logger.warn(f'Manifold name {self._manifold.name} is not recognized! Return no linear map.')
+            Demonstration.logger.warn(f'Manifold name {self._manifold.name} is not recognized! Return no linear map.')
             return
         return A, b
 
     def _pullback_traj(self, f_name):
         if f_name not in self._task_parameters:
-            raise RuntimeError("[Demonstrations] Frame %s not in task parameters!" % f_name)
+            raise RuntimeError("[Demonstration] Frame %s not in task parameters!" % f_name)
         if len(self._task_parameters[f_name]) == 1:  # constant frame
             transformed_traj = self._task_parameters[f_name][0].pullback(self.traj)
             transformed_d_traj = self._task_parameters[f_name][0].pullback_tangent(self._d_traj)
             transformed_dd_traj = self._task_parameters[f_name][0].pullback_tangent(self._dd_traj)
         else:  # time-varying frame
-            transformed_traj = np.array(self.dim, self.length)
+            transformed_traj = np.array(self.dim_M, self.length)
             for t in range(self._length):
                 current_frame = self.get_task_parameters(t, f_name)
                 transformed_traj[:, t] = current_frame.pullback(self.traj[:, t])
@@ -175,12 +187,16 @@ class Demonstrations(object):
         self._dd_traj = dd_traj
         self._dim_M, self._length = self._traj.shape
         if self._dim_M != self._manifold.dim_M:
-            raise RuntimeError('[Demonstrations] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, self._manifold.dim_M))
+            raise RuntimeError('[Demonstration] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, self._manifold.dim_M))
         self._traj_in_frames = None
 
     @property
     def dt(self):
         return self._dt
+
+    @property
+    def tag(self):
+        return self._tag
 
     @property
     def dim_M(self):
@@ -199,7 +215,7 @@ class Demonstrations(object):
         return self._smooth
 
     @property
-    def nb_frames(self):
+    def num_frames(self):
         return len(self._task_parameters)
 
     @property
@@ -230,7 +246,7 @@ if __name__ == '__main__':
         traj.append(manifold.exp_map(traj_vel[:, i], base=traj[-1]))
     traj = np.vstack(traj).T
     obj_pose = np.append(np.array([1, 1, 1]), q_from_euler(np.array([0, 0, np.pi/2])))
-    demo = Demonstrations(traj, manifold=manifold, dt=dt)
+    demo = Demonstration(traj, manifold=manifold, dt=dt)
     obj_frame = demo.create_frame_from_obj_pose(obj_pose)
     demo.add_frame(obj_frame, 'obj')
     obj_traj = obj_frame.pullback(traj)

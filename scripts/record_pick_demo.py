@@ -14,7 +14,7 @@ from tprmp.envs.tasks import PalletizingBoxes # noqa
 from tprmp.envs.gym import Environment  # noqa
 
 env = Environment(task=PalletizingBoxes(), disp=True, real_time_step=True)
-margin = 0.001
+margin = 0.0009
 speed = 0.01
 timeout = 20
 direct = False
@@ -35,5 +35,5 @@ env.movep(env.home_pose, speed=speed, timeout=timeout, direct=direct)
 for t in range(traj.shape[1]):
     env.movep(traj[:, t], speed=speed, timeout=timeout, direct=True)
     time.sleep(1 / env.sampling_hz)
-frames = {'obj_frame': target, 'ee_frame': env.home_pose}
+frames = {'obj_frame': np.array(np.append(target[0], target[1])), 'ee_frame': env.home_pose}
 save_demos(save_name, traj, traj_vel, frames)

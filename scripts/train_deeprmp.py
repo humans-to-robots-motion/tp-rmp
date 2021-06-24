@@ -13,7 +13,7 @@ import time
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
-from tprmp.utils.loading import load_demos  # noqa
+from tprmp.utils.loading import load  # noqa
 from tprmp.networks.rmp_net import DeepRMPNetwork  # noqa
 from tprmp.demonstrations.trajectory import compute_traj_velocity  # noqa
 from tprmp.demonstrations.quaternion import q_to_euler, q_convert_wxyz  # noqa
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
     data_file = join(DATA_DIR, args.data)
-    demo = load_demos(data_file)
+    demo = load(data_file)
     # trajs = simple_demo(T, dt)
     # preprocess data
     traj_accel = compute_traj_velocity(demo['traj_vel'], dt)

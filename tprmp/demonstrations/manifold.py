@@ -13,8 +13,8 @@ class Manifold(object):
     Attributes
     ----------
     self.name, str, the manifold name, e.g. "R^3 x S^3"
-    self.dim_M, int, the manifold space dim
-    self.dim_T, int, the tangent space dim, dim_T <= dim_M
+    self.dim_M, int, the manifold space dim_M
+    self.dim_T, int, the tangent space dim_M, dim_T <= dim_M
     self.log_map, function, the map from tangent space to manifold: p_M = self.log_map(p_T, base=None), base=None is global map
     self.exp_map, function, the map from manifold to tangent space: p_T = self.exp_map(p_M, base=None), base=None is global map
     self.parallel_transport, the parallel transport map: p_hT = self.parallel_transport(p_gT, g, h)
