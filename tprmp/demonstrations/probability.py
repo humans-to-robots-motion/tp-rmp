@@ -33,7 +33,7 @@ class ManifoldGaussian(object):
 
     def transform(self, A, b):
         """
-        Gaussian transformation according to chapter 2.5.5 in [7]. Note that A is of shape (dim_T, dim_T) while b is of
+        Gaussian transformation. Note that A is of shape (dim_T, dim_T) while b is of
         shape (dim_M).
 
         :param A: np.array of shape (dim_T, dim_T), rotation in tangent space

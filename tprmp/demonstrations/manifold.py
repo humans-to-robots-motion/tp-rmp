@@ -131,8 +131,7 @@ class Manifold(object):
         Optional parameters
         -------------------
         :param weights: np.array of shape (length,) that contains a weight for each point. None for no weights (all 1).
-        :param init_mu: np.array of shape (dim_M,), the initial mean for the iterative algorithm. If None a point from
-                        points_in_manifold is used.
+        :param init_mu: np.array of shape (dim_M,), the initial mean for the iterative algorithm.
         :param regularization: float, a regularization factor that prevents singular covariances
         :param accuracy: float, if the change in norm of mean is less than accuracy the algorithm stops.
         :param max_iter: int, the maximum number of iterations.

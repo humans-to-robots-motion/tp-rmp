@@ -8,6 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# TODO: color demo points following gamma
 def plot_demo(demo, only_global=True, legend=True, new_fig=False, show=False, **kwargs):
     if new_fig:
         plt.figure()
@@ -60,12 +61,12 @@ def _plot_traj_frames(demos, **kwargs):
 
 
 def _plot_traj(traj, **kwargs):
-    plot_quat = kwargs.get('plot_quat', False)
-    skip_quat = kwargs.get('skip_quat', 3)
+    plot_quat = kwargs.get('plot_quat', True)
+    skip_quat = kwargs.get('skip_quat', 4)
     plt.plot(traj[0, :], traj[1, :], traj[2, :], **kwargs)
     if plot_quat:
         for t in range(0, traj.shape[1], skip_quat):
-            plot_frame(Frame(q_to_rotation_matrix(traj[-4:, t]), traj[:3, t]), length_scale=0.025, alpha=0.8)
+            plot_frame(Frame(q_to_rotation_matrix(traj[-4:, t]), traj[:3, t]), length_scale=0.02, alpha=0.8)
 
 
 def _equalize_axes(ax, traj):
