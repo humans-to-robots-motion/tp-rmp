@@ -1,14 +1,19 @@
+from tprmp.demonstrations.base import Demonstration
 import numpy as np
 import time
 import pickle
 import os
 import logging
 from sys import float_info
+import matplotlib.pyplot as plt  # noqa
 from os.path import join, dirname, realpath, exists
 
 from tprmp.models.tp_gmm import TPGMM
 from tprmp.optimizer.em import EM
 from tprmp.utils.loading import load
+from tprmp.visualization.demonstration import plot_demo
+from tprmp.visualization.models import plot_hsmm, plot_gmm
+from tprmp.visualization.em import plot_gamma
 
 _path_file = dirname(realpath(__file__))
 DATA_PATH = join(_path_file, '..', '..', 'data', 'tasks')
@@ -36,6 +41,8 @@ class TPHSMM(TPGMM):
         with_tag = kwargs.get('with_tag', False)
         num_comp_per_tag = kwargs.get('num_comp_per_tag', None)
         hmm_shape = kwargs.get('hmm_shape', 'full')
+        if isinstance(demos, Demonstration):
+            demos = [demos]
         if (hmm_shape != 'full'):
             if hmm_shape == 'straight-line':
                 topology = (np.eye(self.num_comp) + np.diag(np.ones(self.num_comp - 1), 1))
@@ -69,7 +76,22 @@ class TPHSMM(TPGMM):
         em.optimize()
         params = em.model_parameters
         self.set_params(params)
-        return params['gamma']
+
+    def plot_model(self, demos, show=True):
+        if isinstance(demos, Demonstration):
+            demos = [demos]
+        # fig = plt.figure(f'TPHSMM of {self.name}', figsize=(18, 6))
+        # ax_g = fig.add_subplot(1, 3, 1)
+        # ax_d = fig.add_subplot(1, 3, 2, projection='3d')
+        # ax_h = fig.add_subplot(1, 3, 3)
+        plot_hsmm(self, new_fig=True, show=show)
+        # plt.sca(ax_g)
+        plot_gamma(self.gamma, new_fig=True, show=show)
+        # plt.sca(ax_d)
+        plot_demo(demos, new_fig=True, show=False)
+        plot_gmm(self, demos[0].get_task_parameters(), new_fig=False, show=show)
+        # if show:
+        #     plt.show()
 
     def set_params(self, model_params):
         super(TPHSMM, self).set_params(model_params)
@@ -79,6 +101,7 @@ class TPHSMM(TPGMM):
         self._end_states = model_params["end_states"]
         self._dt = model_params["dt"]
         self._tag_to_comp = model_params["tag_to_comp_map"] if "tag_to_comp" in model_params else None
+        self._gamma = model_params["gamma"]
 
     def parameters(self):
         params = super(TPHSMM, self).parameters()
@@ -87,6 +110,7 @@ class TPHSMM(TPGMM):
             'duration_prob': self.duration_prob,
             'max_duration': self.max_duration,
             'end_states': self.end_states,
+            'gamma': self.gamma,
             'dt': self.dt,
             'tag_to_comp_map': self.tag_to_comp_map
         })
@@ -179,6 +203,10 @@ class TPHSMM(TPGMM):
     @property
     def end_states(self):
         return self._end_states
+
+    @property
+    def gamma(self):
+        return self._gamma
 
     @property
     def tag_to_comp_map(self):

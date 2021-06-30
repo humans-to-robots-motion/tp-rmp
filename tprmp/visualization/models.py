@@ -71,7 +71,9 @@ def _plot_gaussian(mvn, **kwargs):
     plt.plot([mu[0]], [mu[1]], [mu[2]], marker='o', **kwargs)
 
 
-def plot_hsmm(model, end_states=True, legend=True, duration=True, show=False):  # TODO: check plotting locations
+def plot_hsmm(model, end_states=True, legend=True, duration=True, new_fig=False, show=False):  # TODO: check plotting locations
+    if new_fig:
+        plt.figure()
     comps = range(model.num_comp)
     clusters = [np.nonzero(model.pi > 1e-5)[0].tolist()]
     visited = list(clusters[0])
@@ -140,8 +142,7 @@ def plot_hsmm(model, end_states=True, legend=True, duration=True, show=False):  
             if model.end_states[i] > 1e-3:
                 x = loc[i] + 0.02 * np.array([1, -1])
                 dx = 0.1 * np.array([1, -1])
-                ax.arrow(x[0], x[1], dx[0], dx[1], color='k', head_width=0.01, length_includes_head=True)
-                ax.text(x[0] + 0.5 * dx[0] + 0.01, x[1] + 0.5 * dx[1], "%.2g" % model.end_states[i])
+                ax.text(x[0] + 0.5 * dx[0] + 0.01, x[1] + 0.5 * dx[1], "End prob: %.2g" % model.end_states[i])
     if legend:
         ax.legend()
     if show:

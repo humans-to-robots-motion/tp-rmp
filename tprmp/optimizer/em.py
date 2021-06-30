@@ -2,13 +2,8 @@ import logging
 import itertools
 import numpy as np
 from sys import float_info
-import matplotlib.pyplot as plt
 
 from scipy.stats import multivariate_normal as mvn
-from tprmp.models.tp_gmm import TPGMM
-from tprmp.visualization.demonstration import plot_demo
-from tprmp.visualization.em import plot_gamma
-from tprmp.visualization.models import plot_hsmm, plot_gmm
 
 
 class EM(object):
@@ -21,16 +16,19 @@ class EM(object):
     logger = logging.getLogger(__name__)
 
     def __init__(self, demos, **kwargs):
+        # record variables of demo
         self._demos = demos
         self._num_demos = len(demos)
-        self._frame_names = self.demos[0].self._frame_names
+        self._frame_names = self.demos[0].frame_names
         self._manifold = self.demos[0].manifold
         self._dim_M = self.demos[0].dim_M
+        self._dt = self.demos[0].dt
         self._num_points = sum([demo.length for demo in self.demos])
+        # params
         self._num_comp = kwargs.get('num_comp', 20)
         self._regularization = kwargs.get('regularization', 1e-5)
-        self._min_iter = kwargs.get('self._max_iter', 5)
-        self._max_iter = kwargs.get('self._max_iter', 200)
+        self._min_iter = kwargs.get('min_iter', 5)
+        self._max_iter = kwargs.get('max_iter', 200)
         self._accuracy_ll = kwargs.get('accuracy_ll', 1e-5)
         self._num_comp_per_tag = kwargs.get('num_comp_per_tag', None)  # this will override num_comp if not None
         self._topology = kwargs.get('topology', None)
@@ -62,7 +60,7 @@ class EM(object):
             elif i == self._max_iter - 1:
                 EM.logger.warn(f'Maximum number of iterations {self._max_iter} reached!')
         # make duration model
-        self._make_duration_model()
+        self._duration_model()
         # remove self transitions to ensure smooth execution # NOTE: this is somewhat handcrafted
         for k in range(self._num_comp):
             self.trans_prob[k, k] = 0
@@ -70,23 +68,6 @@ class EM(object):
                 self.trans_prob[k, np.where(self.trans_prob[k, :] < 1e-5)] = 0  # ensure end state leads to no where else
             else:
                 self.trans_prob[k, :] /= self.trans_prob[k, :].sum()
-
-    def plot_results(self, show=True):
-        fig = plt.figure('Training results', figsize=(18, 6))
-        ax_g = fig.add_subplot(1, 3, 1)
-        ax_d = fig.add_subplot(1, 3, 2, projection='3d')
-        ax_h = fig.add_subplot(1, 3, 3)
-        ax_h.set_position([0.67, 0, 0.33, 0.9])
-        plot_hsmm(self)
-        plt.sca(ax_g)
-        plot_gamma(self.gamma)
-        plt.sca(ax_d)
-        plot_demo(self.demos, new_fig=False, show=False)
-        model = TPGMM()
-        model.set_params(self.model_parameters)
-        plot_gmm(model, self.demos[0].get_task_parameters(), new_fig=False, show=False)
-        if show:
-            plt.show()
 
     def _initialize(self):
         self.tag_to_comp_map = {}
@@ -110,7 +91,7 @@ class EM(object):
                 self.tag_to_comp_map[tag] = np.arange(comp_split[tag_idx], comp_split[tag_idx + 1])
         self.mvns = []
         self.pi = np.zeros((self._num_comp,))
-        cluster = [{frame: np.zeros((self._dim_M, 0)) for frame in self._frame_names}] * self._num_comp  # init cluster point holder
+        cluster = [{frame: np.zeros((self._dim_M, 0)) for frame in self._frame_names} for _ in range(self._num_comp)]  # init cluster point holder
         for demo in self.demos:
             if self._with_tag:
                 num_comp = comp_split[demo_tags[demo.tag] + 1] - comp_split[demo_tags[demo.tag]]
@@ -123,7 +104,7 @@ class EM(object):
                 else:
                     comp_id = k
                 for frame in self._frame_names:
-                    cluster[comp_id][frame] = np.column_stack((cluster[comp_id][frame], demo.traj_in_frames[frame][:, equal_split[k]:equal_split[k + 1]]))
+                    cluster[comp_id][frame] = np.column_stack((cluster[comp_id][frame], demo.traj_in_frames[frame]['traj'][:, equal_split[k]:equal_split[k + 1]]))
         for k in range(self._num_comp):
             num_cluster_points = cluster[k][self._frame_names[0]].shape[1]
             self.pi[k] = float(num_cluster_points) / self._num_points
@@ -170,7 +151,7 @@ class EM(object):
         for k in range(self._num_comp):
             for frame in self._frame_names:
                 if self.mvns[k][frame] is not None:
-                    obsrv_prob[:, k] *= self.mvns[k][frame].pdf(demo.traj_in_frames[frame])
+                    obsrv_prob[:, k] *= self.mvns[k][frame].pdf(demo.traj_in_frames[frame]['traj'])
         return obsrv_prob
 
     def _duration_model(self):
@@ -248,7 +229,7 @@ class EM(object):
             # compute the weighted mean over all data points of all demonstrations in each frame.
             for m, demo in enumerate(self.demos):
                 for frame in self._frame_names:
-                    points_in_frames[frame] = np.column_stack((points_in_frames[frame], demo.traj_in_frames[frame]))
+                    points_in_frames[frame] = np.column_stack((points_in_frames[frame], demo.traj_in_frames[frame]['traj']))
                 h[k] = np.append(h[k], self.gamma[m][:, k])
                 gamma_sum[k, 0] += np.sum(self.gamma[m][0:-1, k])
             # compute and add to mvns[k] the Gaussian for each frame
@@ -259,6 +240,10 @@ class EM(object):
     @property
     def demos(self):
         return self._demos
+
+    @property
+    def num_comp(self):
+        return self._num_comp
 
     @property
     def model_parameters(self):
@@ -272,6 +257,7 @@ class EM(object):
             'gamma': self.gamma,
             'zeta': self.zeta,
             'tag_to_comp_map': self.tag_to_comp_map,
-            'dim_M': self._dim_M
+            'dim_M': self._dim_M,
+            'dt': self._dt
         }
         return model_params
