@@ -128,34 +128,9 @@ class Demonstration(object):
         ----------
         :return frame (Frame object): with the correponded manifold of this demonstration.
         """
-        A, b = self.construct_linear_map(pose)
+        A, b = Demonstration.construct_linear_map(self._manifold, pose)
         frame = Frame(A, b, manifold=self._manifold)
         return frame
-
-    def construct_linear_map(self, pose):
-        """
-        Construct orientation matrix A and translation vector b from pose.
-
-        Parameters
-        ----------
-        :param pose: np.array([x,y,z, w,x,y,z]).
-
-        Returns
-        ----------
-        :return A (np.array): rotation in tangent space
-        :return b (np.array): translation in manifold space
-        """
-        if self._manifold.name == 'R^3 x S^3':
-            q_rot_mat = q_to_rotation_matrix(pose[3:])
-            A = block_diag(q_rot_mat, np.eye(3))
-            b = pose
-        elif 'S^3' not in self._manifold.name and 'R^' in self._manifold.name:  # pure Euclidean
-            A = np.eye(self._manifold.dim_M)
-            b = pose
-        else:
-            Demonstration.logger.warn(f'Manifold name {self._manifold.name} is not recognized! Return no linear map.')
-            return
-        return A, b
 
     def _pullback_traj(self, f_name):
         if f_name not in self._task_parameters:
@@ -172,6 +147,32 @@ class Demonstration(object):
                 transformed_d_traj = current_frame.pullback_tangent(self._d_traj[:, t])
                 transformed_dd_traj = current_frame.pullback_tangent(self._dd_traj[:, t])
         return transformed_traj, transformed_d_traj, transformed_dd_traj
+
+    @staticmethod
+    def construct_linear_map(manifold, pose):
+        """
+        Construct orientation matrix A and translation vector b from pose.
+
+        Parameters
+        ----------
+        :param pose: np.array([x,y,z, w,x,y,z]).
+
+        Returns
+        ----------
+        :return A (np.array): rotation in tangent space
+        :return b (np.array): translation in manifold space
+        """
+        if manifold.name == 'R^3 x S^3':
+            q_rot_mat = q_to_rotation_matrix(pose[3:])
+            A = block_diag(q_rot_mat, np.eye(3))
+            b = pose
+        elif 'S^3' not in manifold.name and 'R^' in manifold.name:  # pure Euclidean
+            A = np.eye(manifold.dim_M)
+            b = pose
+        else:
+            Demonstration.logger.warn(f'Manifold name {manifold.name} is not recognized! Return no linear map.')
+            return
+        return A, b
 
     @property
     def traj(self):

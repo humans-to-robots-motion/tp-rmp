@@ -74,8 +74,7 @@ class TPHSMM(TPGMM):
         # start training
         em = EM(demos, num_comp=self.num_comp, topology=topology, **kwargs)
         em.optimize()
-        params = em.model_parameters
-        self.set_params(params)
+        self.set_params(em.model_parameters)
 
     def plot_model(self, demos, show=True):
         if isinstance(demos, Demonstration):
@@ -157,9 +156,10 @@ class TPHSMM(TPGMM):
             pdfs[k] = self.combine_gaussians(k, frames).pdf(obsrv) + float_info.min
         return pdfs
 
-    def save(self, file):
-        file = join(DATA_PATH, self.name, 'models', 'tphsmm_' + str(time.time()) + '.p')
-        os.makedirs(file, exist_ok=True)
+    def save(self, name=None):
+        model_folder = join(DATA_PATH, self.name, 'models')
+        os.makedirs(model_folder, exist_ok=True)
+        file = join(model_folder, (name if name is not None else 'tphsmm_' + str(time.time())) + '.p')
         with open(file, 'wb') as f:
             pickle.dump(self.parameters(), f)
 

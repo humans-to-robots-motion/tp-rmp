@@ -7,7 +7,7 @@ def load(demo_file):
     return data
 
 
-def save_demos(demo_file, traj, traj_vel, frames):
-    data = {'traj': traj, 'traj_vel': traj_vel, 'frames': frames}
+def save_demos(demo_file, trajs, traj_vels, frames, tags):
+    data = {'trajs': trajs, 'traj_vel': traj_vels, 'frames': frames, 'tags': tags}
     with open(demo_file, 'wb') as f:
         pickle.dump(data, f)

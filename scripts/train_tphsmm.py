@@ -34,3 +34,4 @@ for k, v in data['frames'].items():
 model = TPHSMM(num_comp=5, name=args.task)
 gamma = model.train(demo, plot=True)
 model.plot_model(demo)
+model.save(name='sample')
