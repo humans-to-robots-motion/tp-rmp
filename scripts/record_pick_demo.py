@@ -82,4 +82,4 @@ for _ in range(args.num):
     tags.append('pick_side')
     obj_frames.append(np.append(target[0], target[1]))
 frames = {'obj_frame': obj_frames, 'ee_frame': env.home_pose}
-save_demos(save_name, trajs, traj_vels, frames, tags)
+save_demos(save_name, trajs, traj_vels, frames, tags, dt=1/env.sampling_hz)

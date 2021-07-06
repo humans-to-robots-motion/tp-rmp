@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 # TODO: color demo points following gamma
-def plot_demo(demo, only_global=True, legend=True, new_fig=False, show=False, **kwargs):
+def plot_demo(demo, **kwargs):
+    only_global = kwargs.get('only_global', True)
+    new_fig = kwargs.get('new_fig', False)
+    show = kwargs.get('show', False)
     if new_fig:
         plt.figure()
     if isinstance(demo, Demonstration):
@@ -18,26 +21,33 @@ def plot_demo(demo, only_global=True, legend=True, new_fig=False, show=False, **
     if not only_global and len(demo[0].frame_names) > 0:
         plt.figure()  # new figure for other frames visual
         _plot_traj_frames(demo, **kwargs)
-    if legend:
-        plt.legend()
     if show:
         plt.show()
 
 
 def _plot_traj_global(demos, **kwargs):
+    legend = kwargs.get('legend', True)
     plot_frames = kwargs.get('plot_frames', True)
     plt.title('Global frame')
     ax = plt.subplot(111, projection="3d")
+    demo_tags = list(set([demo.tag for demo in demos]))
+    tag_map = {v: i for i, v in enumerate(demo_tags)}
+    cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     # equal xyz scale
     sample_traj = demos[0].traj
     _equalize_axes(ax, sample_traj)
     for d in range(len(demos)):
-        _plot_traj(demos[d].traj, label=demos[d].tag, **kwargs)
+        _plot_traj(demos[d].traj, label=demos[d].tag, color=cycle[tag_map[demos[d].tag]], **kwargs)
         if plot_frames:
             plot_frame(demos[d].get_task_parameters().values())
+    if legend:
+        handles, labels = plt.gca().get_legend_handles_labels()
+        temp = {k: v for k, v in zip(labels, handles)}
+        plt.legend(temp.values(), temp.keys(), loc='best')
 
 
 def _plot_traj_frames(demos, **kwargs):
+    legend = kwargs.get('legend', True)
     plot_frames = kwargs.get('plot_frames', True)
     frames = demos[0].frame_names
     if len(plt.gcf().get_axes()) != len(frames):
@@ -52,18 +62,27 @@ def _plot_traj_frames(demos, **kwargs):
         plt.sca(axs[f_key])
         sample_traj = demos[0].traj_in_frames[f_key]['traj']
         _equalize_axes(axs[f_key], sample_traj)
+        demo_tags = list(set([demo.tag for demo in demos]))
+        tag_map = {v: i for i, v in enumerate(demo_tags)}
+        cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
         for d in range(len(demos)):
-            _plot_traj(demos[d].traj_in_frames[f_key]['traj'], label=demos[d].tag, **kwargs)
+            _plot_traj(demos[d].traj_in_frames[f_key]['traj'], label=demos[d].tag, color=cycle[tag_map[demos[d].tag]], **kwargs)
         if plot_frames:
             plt.plot([0, 1 / 40], [0, 0], [0, 0], 'r')
             plt.plot([0, 0], [0, 1 / 40], [0, 0], 'b')
             plt.plot([0, 0], [0, 0], [0, 1 / 40], 'g')
+    if legend:
+        handles, labels = plt.gca().get_legend_handles_labels()
+        temp = {k: v for k, v in zip(labels, handles)}
+        plt.legend(temp.values(), temp.keys(), loc='best')
 
 
 def _plot_traj(traj, **kwargs):
     plot_quat = kwargs.get('plot_quat', True)
+    label = kwargs.get('label', '')
+    color = kwargs.get('color', 'b')
     skip_quat = kwargs.get('skip_quat', 4)
-    plt.plot(traj[0, :], traj[1, :], traj[2, :], **kwargs)
+    plt.plot(traj[0, :], traj[1, :], traj[2, :], color=color, label=label)
     if plot_quat:
         for t in range(0, traj.shape[1], skip_quat):
             plot_frame(Frame(q_to_rotation_matrix(traj[-4:, t]), traj[:3, t]), length_scale=0.02, alpha=0.8)
