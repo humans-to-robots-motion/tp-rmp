@@ -45,7 +45,7 @@ class EM(object):
         self._initialize()
 
     def optimize(self):
-        EM.logger.info(f'Start training TP-HSMM with {self._num_comp} components. Tagging: {self._num_comp_per_tag}')
+        EM.logger.info(f'Start training TP-HSMM with {self._num_comp} components.')
         av_ll = 0
         # EM-Iteration
         for i in range(self._max_iter):
@@ -89,6 +89,7 @@ class EM(object):
                 comp_split = np.linspace(0, self._num_comp, len(demo_tags) + 1, dtype=int)
             for tag, tag_idx in demo_tags.items():
                 self.tag_to_comp_map[tag] = np.arange(comp_split[tag_idx], comp_split[tag_idx + 1])
+        EM.logger.info(f'Tagging: {self.tag_to_comp_map}')
         self.mvns = []
         self.pi = np.zeros((self._num_comp,))
         cluster = [{frame: np.zeros((self._dim_M, 0)) for frame in self._frame_names} for _ in range(self._num_comp)]  # init cluster point holder

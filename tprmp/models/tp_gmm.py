@@ -31,6 +31,7 @@ class TPGMM(object):
         self._pi = None
         self._num_frames = None
         self._dim_M = None
+        self._tag_to_comp_map = None
 
     def train(self, demos):
         # TODO: implement training routine for TPGMM if needed
@@ -55,6 +56,7 @@ class TPGMM(object):
         self._frame_names = list(self.mvns[0].keys())
         self._num_frames = len(self._frame_names)
         self._dim_M = model_params["dim_M"]
+        self._tag_to_comp_map = model_params["tag_to_comp_map"] if "tag_to_comp_map" in model_params else None
 
     def reset_covariance(self, idxs_1, idxs_2):
         """
@@ -66,9 +68,11 @@ class TPGMM(object):
                 self._mvns[k][f_key].cov[np.ix_(idxs_1, idxs_2)] = 0.0
                 self._mvns[k][f_key].cov[np.ix_(idxs_2, idxs_1)] = 0.0
 
-    def generate_global_gmm(self, frames):
+    def generate_global_gmm(self, frames, tag=None):
+        comps = range(self.num_comp) if ((self._tag_to_comp_map is None) or
+                                         (tag not in self._tag_to_comp_map)) else self.tag_to_comp_map[tag]
         global_gmm = []
-        for k in range(self.num_comp):
+        for k in comps:
             global_gmm.append(self.combine_gaussians(k, frames))
         return global_gmm
 
@@ -91,7 +95,8 @@ class TPGMM(object):
         params = {
             'mvns': self.mvns,
             'pi': self.pi,
-            'dim_M': self.dim_M
+            'dim_M': self.dim_M,
+            'tag_to_comp_map': self.tag_to_comp_map
         }
         return params
 
@@ -142,3 +147,7 @@ class TPGMM(object):
     @property
     def component_names(self):
         return self._component_names
+
+    @property
+    def tag_to_comp_map(self):
+        return self._tag_to_comp_map

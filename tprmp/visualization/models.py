@@ -22,17 +22,19 @@ def plot_gmm(model, frames, only_global=True, legend=True, new_fig=False, show=F
 
 def _plot_gmm_global(model, frames, **kwargs):
     plot_quat = kwargs.get('plot_quat', False)
+    tag = kwargs.get('tag', None)
     plt.subplot(111, projection="3d")
-    global_mvns = model.generate_global_gmm(frames)
+    global_mvns = model.generate_global_gmm(frames, tag=tag)
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
-    for k in range(model.num_comp):  # TODO: change to multiple cluster with tags
-        _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)], **kwargs)
+    for k in range(len(global_mvns)):  # TODO: change to multiple cluster with tags
+        _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)])
         if plot_quat:
             plot_frame(global_mvns[k].mean[-4:], global_mvns[k].mean[:3], length_scale=0.02, alpha=0.8)
 
 
 def _plot_gmm_frames(model, frames, **kwargs):
     plot_quat = kwargs.get('plot_quat', False)
+    tag = kwargs.get('tag', None)
     if len(plt.gcf().get_axes()) != len(frames):
         plt.clf()
         axs = {}
@@ -47,13 +49,15 @@ def _plot_gmm_frames(model, frames, **kwargs):
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     for frame in frames:
         plt.sca(axs[frame])
-        for k in range(model.num_comp):  # TODO: change to multiple cluster with tags
-            _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)], **kwargs)
+        comps = range(model.num_comp) if ((model.tag_to_comp_map is None) or
+                                          (tag not in model.tag_to_comp_map)) else model.tag_to_comp_map[tag]
+        for k in comps:  # TODO: change to multiple cluster with tags
+            _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)])
             if plot_quat:
                 plot_frame(model.mvns[k][frame].mean[-4:], model.mvns[k][frame].mean[:3], length_scale=0.02, alpha=0.8)
 
 
-def _plot_gaussian(mvn, **kwargs):
+def _plot_gaussian(mvn, color='b'):
     mu = mvn.mean[:3]
     cov = mvn.cov[:3, :3]
     center = mu[0:3]
@@ -67,8 +71,8 @@ def _plot_gaussian(mvn, **kwargs):
     for i in range(len(x)):
         for j in range(len(x)):
             [x[i, j], y[i, j], z[i, j]] = np.dot([x[i, j], y[i, j], z[i, j]], rotation) + center
-    plt.gca().plot_wireframe(x, y, z, rstride=4, cstride=4, alpha=0.3, **kwargs)
-    plt.plot([mu[0]], [mu[1]], [mu[2]], marker='o', **kwargs)
+    plt.gca().plot_wireframe(x, y, z, rstride=4, cstride=4, alpha=0.3, color=color)
+    plt.plot([mu[0]], [mu[1]], [mu[2]], marker='o', color=color)
 
 
 def plot_hsmm(model, end_states=True, legend=True, duration=True, new_fig=False, show=False):  # TODO: check plotting locations
@@ -79,8 +83,8 @@ def plot_hsmm(model, end_states=True, legend=True, duration=True, new_fig=False,
     visited = list(clusters[0])
     for k in comps:
         clusters.append([])
-        for k in clusters[-2]:
-            next_states = np.nonzero(model.trans_prob[k, :] > 1e-5)[0].tolist()
+        for i in clusters[-2]:
+            next_states = np.nonzero(model.trans_prob[i, :] > 1e-5)[0].tolist()
             for state in next_states:
                 if state not in visited:
                     clusters[k + 1].append(state)
@@ -142,7 +146,7 @@ def plot_hsmm(model, end_states=True, legend=True, duration=True, new_fig=False,
             if model.end_states[i] > 1e-3:
                 x = loc[i] + 0.02 * np.array([1, -1])
                 dx = 0.1 * np.array([1, -1])
-                ax.text(x[0] + 0.5 * dx[0] + 0.01, x[1] + 0.5 * dx[1], "End prob: %.2g" % model.end_states[i])
+                ax.text(x[0] + 0.5 * dx[0] + 0.01, x[1] + 0.5 * dx[1], "End: %.2g" % model.end_states[i])
     if legend:
         ax.legend()
     if show:

@@ -32,7 +32,6 @@ class TPHSMM(TPGMM):
         self._max_duration = None
         self._dt = None
         self._end_states = None
-        self._tag_to_comp_map = None
 
     def train(self, demos, **kwargs):
         """
@@ -66,6 +65,11 @@ class TPHSMM(TPGMM):
                     comp_n += nb_comp
                     off_diag[comp_n - 1] = 0.0
                 topology = (np.eye(self.num_comp) + np.diag(off_diag, 1))
+                # remove connection between splits
+                k = nb_comp_per_line[0][1]
+                for i in range(len(nb_comp_per_line) - 1):
+                    topology[k - 1, k] = 0.
+                    k += nb_comp_per_line[i][1]
             else:
                 TPHSMM.logger.warn('HSMM shape is not recognized. Use full structure')
                 topology = np.ones((self.num_comp, self.num_comp))
@@ -76,7 +80,7 @@ class TPHSMM(TPGMM):
         em.optimize()
         self.set_params(em.model_parameters)
 
-    def plot_model(self, demos, show=True):
+    def plot_model(self, demos, plot_quat=False, show=True):
         if isinstance(demos, Demonstration):
             demos = [demos]
         # fig = plt.figure(f'TPHSMM of {self.name}', figsize=(18, 6))
@@ -87,8 +91,15 @@ class TPHSMM(TPGMM):
         # plt.sca(ax_g)
         plot_gamma(self.gamma, new_fig=True, show=show)
         # plt.sca(ax_d)
-        plot_demo(demos, new_fig=True, show=False)
-        plot_gmm(self, demos[0].get_task_parameters(), new_fig=False, show=show)
+        tag_to_demos = {}
+        for i, demo in enumerate(demos):
+            if demo.tag not in tag_to_demos:
+                tag_to_demos[demo.tag] = []
+            tag_to_demos[demo.tag].append(i)
+        for tag in tag_to_demos:  # plot one demo for each tag
+            m = tag_to_demos[tag][0]
+            plot_demo(demos[m], plot_quat=plot_quat, new_fig=True, show=False)
+            plot_gmm(self, demos[m].get_task_parameters(), plot_quat=plot_quat, tag=tag, new_fig=False, show=show)
         # if show:
         #     plt.show()
 
@@ -99,7 +110,6 @@ class TPHSMM(TPGMM):
         self._max_duration = int(model_params["max_duration"])
         self._end_states = model_params["end_states"]
         self._dt = model_params["dt"]
-        self._tag_to_comp = model_params["tag_to_comp_map"] if "tag_to_comp" in model_params else None
         self._gamma = model_params["gamma"]
 
     def parameters(self):
@@ -110,8 +120,7 @@ class TPHSMM(TPGMM):
             'max_duration': self.max_duration,
             'end_states': self.end_states,
             'gamma': self.gamma,
-            'dt': self.dt,
-            'tag_to_comp_map': self.tag_to_comp_map
+            'dt': self.dt
         })
         return params
 
@@ -207,7 +216,3 @@ class TPHSMM(TPGMM):
     @property
     def gamma(self):
         return self._gamma
-
-    @property
-    def tag_to_comp_map(self):
-        return self._tag_to_comp_map
