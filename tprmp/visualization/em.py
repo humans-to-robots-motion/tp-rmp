@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 
-def plot_gamma(gamma, new_fig=False, show=False):
+def plot_gamma(gamma, title='Gamma', new_fig=False, show=False):
     if new_fig:
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -10,7 +10,7 @@ def plot_gamma(gamma, new_fig=False, show=False):
         fig = plt.gcf()  # context dependent
         ax = plt.gca()
     ax.set_axis_off()
-    ax.set_title("Gamma")
+    ax.set_title(title)
     sps = ax.get_subplotspec()
     max_len = max([g.shape[0] for g in gamma])
     grid = gridspec.GridSpecFromSubplotSpec(len(gamma), 1, subplot_spec=sps, wspace=0.1, hspace=0.1)

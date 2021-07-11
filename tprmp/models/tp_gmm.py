@@ -15,7 +15,7 @@ class TPGMM(object):
     "A Tutorial on Task-Parameterized Movement Learning and Retrieval." Sylvain Calinon, 2016.
     """
 
-    def __init__(self, num_comp=0, name=''):
+    def __init__(self, num_comp=5, name=''):
         """
         Parameters
         ----------
@@ -24,11 +24,11 @@ class TPGMM(object):
         self._name = name
         if not isinstance(num_comp, int) or num_comp < 1:
             raise ValueError('[TPGMM]: num_comp must be a positive integer.')
-        self._mvns = None
         self._num_comp = num_comp
+        self._mvns = None
+        self._pi = None
         self._frame_names = None
         self._component_names = None
-        self._pi = None
         self._num_frames = None
         self._dim_M = None
         self._tag_to_comp_map = None
@@ -56,7 +56,6 @@ class TPGMM(object):
         self._frame_names = list(self.mvns[0].keys())
         self._num_frames = len(self._frame_names)
         self._dim_M = model_params["dim_M"]
-        self._tag_to_comp_map = model_params["tag_to_comp_map"] if "tag_to_comp_map" in model_params else None
 
     def reset_covariance(self, idxs_1, idxs_2):
         """
@@ -95,8 +94,7 @@ class TPGMM(object):
         params = {
             'mvns': self.mvns,
             'pi': self.pi,
-            'dim_M': self.dim_M,
-            'tag_to_comp_map': self.tag_to_comp_map
+            'dim_M': self.dim_M
         }
         return params
 

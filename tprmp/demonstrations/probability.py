@@ -49,8 +49,8 @@ class ManifoldGaussian(object):
         if b.shape != (self.manifold.dim_M,):
             raise RuntimeError('[Manifold]: Expected b to be of the dimension of the manifold'
                                ' space (%s,) and not %s' % (self.manifold.dim_M, b.shape))
-        mu_trafo = self.manifold.exp_map(A.dot(self.manifold.log_map(self.mean)), base=b)  # (2.53) in [7]
-        sigma_trafo = self.manifold.matrix_parallel_transport(A.dot(self.cov).dot(A.T), b, mu_trafo)  # (2.54) in [7]
+        mu_trafo = self.manifold.exp_map(A.dot(self.manifold.log_map(self.mean)), base=b)  # (2.53)
+        sigma_trafo = self.manifold.matrix_parallel_transport(A.dot(self.cov).dot(A.T), b, mu_trafo)  # (2.54)
         return ManifoldGaussian(self.manifold, mu_trafo, sigma_trafo)
 
     def kl_divergence_mvn(self, g):
