@@ -29,6 +29,7 @@ class TPHSMM(TPGMM):
         super(TPHSMM, self).__init__(num_comp, name)
         self._trans_prob = None
         self._duration_prob = None
+        self._duration_mvns = None
         self._max_duration = None
         self._dt = None
         self._end_states = None
@@ -77,14 +78,17 @@ class TPHSMM(TPGMM):
         model_params['mvns'] = np.array([{} for _ in range(self.num_comp)])
         model_params['pi'] = np.zeros(self.num_comp)
         model_params['trans_prob'] = np.zeros((self.num_comp, self.num_comp))
+        model_params['duration_mvns'] = np.array([None for _ in range(self.num_comp)])
         model_params['end_states'] = np.zeros(self.num_comp)
         model_params['max_duration'] = tag_to_params[tags[0]]['max_duration']
         model_params['dim_M'] = tag_to_params[tags[0]]['dim_M']
         model_params['dt'] = tag_to_params[tags[0]]['dt']
+        model_params['tag_to_comp_map'] = self.tag_to_comp_map
         for tag in tag_to_params:
             model_params['mvns'][self.tag_to_comp_map[tag]] = tag_to_params[tag]['mvns']
             model_params['pi'][self.tag_to_comp_map[tag]] = tag_to_params[tag]['pi']
             model_params['trans_prob'][np.ix_(self.tag_to_comp_map[tag], self.tag_to_comp_map[tag])] = tag_to_params[tag]['trans_prob']
+            model_params['duration_mvns'][self.tag_to_comp_map[tag]] = tag_to_params[tag]['duration_mvns']
             model_params['max_duration'] = max(model_params['max_duration'], tag_to_params[tag]['max_duration'])
             model_params['end_states'][self.tag_to_comp_map[tag]] = tag_to_params[tag]['end_states']
             if model_params['dim_M'] != tag_to_params[tags[0]]['dim_M']:
@@ -114,6 +118,7 @@ class TPHSMM(TPGMM):
         super(TPHSMM, self).set_params(model_params)
         self._trans_prob = model_params["trans_prob"]
         self._duration_prob = model_params["duration_prob"]
+        self._duration_mvns = model_params["duration_mvns"]
         self._max_duration = int(model_params["max_duration"])
         self._end_states = model_params["end_states"]
         self._dt = model_params["dt"]
@@ -123,6 +128,7 @@ class TPHSMM(TPGMM):
         params.update({
             'trans_prob': self.trans_prob,
             'duration_prob': self.duration_prob,
+            'duration_mvns': self.duration_mvns,
             'max_duration': self.max_duration,
             'end_states': self.end_states,
             'dt': self.dt
@@ -173,7 +179,7 @@ class TPHSMM(TPGMM):
     def save(self, name=None):
         model_folder = join(DATA_PATH, self.name, 'models')
         os.makedirs(model_folder, exist_ok=True)
-        file = join(model_folder, (name if name is not None else 'tphsmm_' + str(time.time())) + '.p')
+        file = join(model_folder, name if name is not None else ('tphsmm_' + str(time.time()) + '.p'))
         with open(file, 'wb') as f:
             pickle.dump(self.parameters(), f)
 
@@ -214,6 +220,10 @@ class TPHSMM(TPGMM):
     @property
     def duration_prob(self):
         return self._duration_prob
+
+    @property
+    def duration_mvns(self):
+        return self._duration_mvns
 
     @property
     def max_duration(self):

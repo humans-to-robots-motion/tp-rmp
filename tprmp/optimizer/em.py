@@ -150,11 +150,12 @@ class EM(object):
         # Set maximal duration according to rule of thumb in footnote 3 in [2]
         self.max_duration = int(max([g.shape[0] for g in self.gamma]) * 3 / self.num_comp)  # TODO: check this
         self.duration_prob = np.zeros((self.num_comp, self.max_duration))
+        self.duration_mvns = []
         for k in range(self.num_comp):
             mvn_duration = mvn(np.mean(ds[k]), np.var(ds[k]) + 1)
-            for d in range(self.max_duration):
-                self.duration_prob[k, d] = mvn_duration.pdf(d)
-            self.duration_prob[k, :] /= (self.duration_prob[k, :].sum() + float_info.min)
+            self.duration_prob[k] = mvn_duration.pdf(range(self.max_duration))
+            self.duration_prob[k] /= (self.duration_prob[k].sum() + float_info.min)
+            self.duration_mvns.append(mvn_duration)
 
     def _forward(self, demo, obsrv_prob):
         alpha = np.zeros((demo.length, self.num_comp))
@@ -230,6 +231,7 @@ class EM(object):
             'pi': self.pi,
             'trans_prob': self.trans_prob,
             'duration_prob': self.duration_prob,
+            'duration_mvns': self.duration_mvns,
             'max_duration': self.max_duration,
             'end_states': self.end_states,
             'gamma': self.gamma,

@@ -28,8 +28,9 @@ def plot_demo(demo, **kwargs):
 def _plot_traj_global(demos, **kwargs):
     legend = kwargs.get('legend', True)
     plot_frames = kwargs.get('plot_frames', True)
-    plt.title('Global frame')
-    ax = plt.subplot(111, projection="3d")
+    title = kwargs.get('title', 'Global frame')
+    ax = plt.gca()
+    plt.title(title)
     demo_tags = list(set([demo.tag for demo in demos]))
     tag_map = {v: i for i, v in enumerate(demo_tags)}
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]

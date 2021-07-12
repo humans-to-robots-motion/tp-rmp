@@ -13,14 +13,14 @@ from tprmp.models.tp_hsmm import TPHSMM  # noqa
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python load_demos.py test.p')
 parser.add_argument('task', help='The task folder', type=str, default='test')
-parser.add_argument('data', help='The data file', type=str, default='sample.p')
+parser.add_argument('data', help='The data file', type=str, default='sample2.p')
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
 data_file = join(DATA_DIR, args.data)
 demos = load_demos(data_file)
 
-model = TPHSMM(num_comp=10, name=args.task)
+model = TPHSMM(num_comp=40, name=args.task)
 model.train(demos, with_tag=True)
 model.plot_model(demos, tagging=False)
-# model.save(name='sample')
+model.save(name=args.data)

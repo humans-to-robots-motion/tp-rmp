@@ -47,15 +47,16 @@ class TPGMM(object):
             model_params["pi"] = np.array([w1, w2, ... wK]).
             model_params["dim_M"] int, the dimension of the data.
         """
-        self._pi = model_params["pi"]
-        self._mvns = model_params["mvns"]
+        self._pi = model_params['pi']
+        self._mvns = model_params['mvns']
         self._num_comp = len(self._mvns)
         self._component_names = []
         for comp in range(self.num_comp):
             self._component_names.append(self.name + ("_comp_%s" % comp))
         self._frame_names = list(self.mvns[0].keys())
         self._num_frames = len(self._frame_names)
-        self._dim_M = model_params["dim_M"]
+        self._dim_M = model_params['dim_M']
+        self._tag_to_comp_map = model_params['tag_to_comp_map'] if 'tag_to_comp_map' in model_params else None
 
     def reset_covariance(self, idxs_1, idxs_2):
         """
@@ -94,7 +95,8 @@ class TPGMM(object):
         params = {
             'mvns': self.mvns,
             'pi': self.pi,
-            'dim_M': self.dim_M
+            'dim_M': self.dim_M,
+            'tag_to_comp_map': self.tag_to_comp_map
         }
         return params
 
