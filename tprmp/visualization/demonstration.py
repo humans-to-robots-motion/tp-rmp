@@ -29,7 +29,11 @@ def _plot_traj_global(demos, **kwargs):
     legend = kwargs.get('legend', True)
     plot_frames = kwargs.get('plot_frames', True)
     title = kwargs.get('title', 'Global frame')
-    ax = plt.gca()
+    new_ax = kwargs.get('new_ax', False)
+    if new_ax:
+        ax = plt.subplot(111, projection="3d")
+    else:
+        ax = plt.gca()
     plt.title(title)
     demo_tags = list(set([demo.tag for demo in demos]))
     tag_map = {v: i for i, v in enumerate(demo_tags)}

@@ -111,7 +111,7 @@ class TPHSMM(TPGMM):
         tag_to_demos = TPHSMM.compute_tag_to_demo(demos)
         for tag in tag_to_demos:  # plot one demo for each tag
             demo = tag_to_demos[tag][0]
-            plot_demo(demo, plot_quat=plot_quat, new_fig=True, show=False)
+            plot_demo(demo, plot_quat=plot_quat, new_fig=True, new_ax=True, show=False)
             plot_gmm(self, demo.get_task_parameters(), plot_quat=plot_quat, tag=tag if tagging else None, new_fig=False, show=show)
 
     def set_params(self, model_params):
