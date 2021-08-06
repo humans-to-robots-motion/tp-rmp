@@ -68,6 +68,10 @@ class ManifoldGaussian(object):
     def cov(self):
         return self._cov
 
+    @property
+    def nf(self):
+        return self._nf
+
     @cov.setter
     def cov(self, value):
         self._cov = value

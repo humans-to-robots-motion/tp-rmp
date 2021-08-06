@@ -16,6 +16,8 @@ class TPRMP(object):
 
     def __init__(self, **kwargs):
         self._model = TPHSMM(**kwargs)
+        self._phi0 = None
+        self._d0 = None
 
     def save(self, name=None):
         self.model.save(name)
@@ -24,9 +26,8 @@ class TPRMP(object):
         """
         Retrieve global RMP.
         """
-        pass
 
-    def compute_potential_force(self, x, t, global_mvns, **kwargs):
+    def compute_canonical_rmp(self, x, t, global_mvns, **kwargs):
         manifold = global_mvns[0].manifold
         K = kwargs.get('K', 10 * np.eye(manifold.dim_T))
         hard = kwargs.get('hard', True)
@@ -39,31 +40,28 @@ class TPRMP(object):
                 phi[k] = K @ manifold.log_map(x, base=global_mvns[k].mean)
             return weights @ phi
 
-    def compute_force_weights(self, x, t, global_mvns, **kwargs):
-        alpha_pose = kwargs.get('alpha_pose', 0.5)
-        alpha_time = kwargs.get('alpha_time', 1.0)
-        eps_pose = kwargs.get('eps_pose', 0.05)
-        eps_time = kwargs.get('eps_time', 0.01)
-        normalized = kwargs.get('normalized', True)
-        duration_mvns = self.model.duration_mvns
-        tag_to_comp_map = self.model.tag_to_comp_map
-        weights = np.zeros(self.model.num_comp)
-        for tag in tag_to_comp_map:
-            tau = 0.
-            for k in tag_to_comp_map[tag]:
-                # pose weighting
-                manifold = global_mvns[k].manifold
-                pose, pose_cov = global_mvns[k].mean, global_mvns[k].cov + eps_pose * np.eye(manifold.dim_T)
-                projected_pose = manifold.log_map(x, base=pose)
-                weights[k] = np.squeeze(np.exp(-alpha_pose * projected_pose.T @ np.linalg.inv(pose_cov) @ projected_pose))
-                # time weighting
-                tau += duration_mvns[k].mean
-                tau_cov = duration_mvns[k].cov + eps_time
-                weights[k] *= np.squeeze(np.exp(-alpha_time * ((t - tau) ** 2) / tau_cov))
-        # normalize weights
-        if normalized:
-            weights /= weights.sum()
-        return weights
+    def compute_policy(self, x, x_dot, global_mvns):
+        phi = self.compute_potentials(x, global_mvns)
+        weights = TPRMP.compute_obsrv_prob(x, global_mvns)
+        Phi = weights @ phi
+        num_comp = len(global_mvns)
+        manifold = global_mvns[0].manifold
+        Fs = np.zeros((num_comp, manifold.dim_T))
+        for k in range(num_comp):
+            Fs[k] = weights[k] * (phi[k] - Phi) * global_mvns[k].cov_inv @ manifold.log_map(x, base=global_mvns[k].mean)
+            Fs[k] += -weights[k] * global_mvns[k].cov_inv @ manifold.log_map(x, base=global_mvns[k].mean)
+            Fs[k] += -weights[k] * self._d0[k] * x_dot
+        return Fs.sum(axis=0)
+
+    def compute_potentials(self, x, global_mvns):
+        num_comp = len(global_mvns)
+        phi = np.zeros(num_comp)
+        manifold = global_mvns[0].manifold
+        for k in range(num_comp):
+            comp = global_mvns[k]
+            v = manifold.log_map(x, base=comp.mean)
+            phi[k] = self._phi0[k] + v.T @ comp.cov_inv @ v
+        return phi
 
     def train(self, demos, **kwargs):
         """
@@ -74,6 +72,21 @@ class TPRMP(object):
         :param demos: list of Demonstration objects
         """
         self.model.train(demos, **kwargs)
+
+    @staticmethod
+    def compute_obsrv_prob(obsrv, global_mvns, normalized=True):
+        """
+        Parameters
+        ----------
+        :param model_name: name of model in data/models
+        """
+        num_comp = len(global_mvns)
+        prob = np.zeros(num_comp)
+        for k in range(num_comp):
+            prob[k] = global_mvns[k].pdf(obsrv)
+        if normalized:
+            prob /= prob.sum()
+        return prob
 
     @staticmethod
     def load(task_name, model_name='sample.p'):
