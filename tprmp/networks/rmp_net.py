@@ -5,7 +5,6 @@ import torch.nn.functional as F
 
 
 class LowTri:
-
     def __init__(self, m):
 
         # Calculate lower triangular matrix indices using numpy
@@ -77,7 +76,6 @@ class CosDer(nn.Module):
 
 
 class LagrangianLayer(nn.Module):
-
     def __init__(self, input_size, output_size, activation="ReLu"):
         super(LagrangianLayer, self).__init__()
 
@@ -105,18 +103,21 @@ class LagrangianLayer(nn.Module):
             self.g_prime = LinearDer()
 
         else:
-            raise ValueError("Activation Type must be in ['Linear', 'ReLu', 'SoftPlus', 'Cos'] but is {0}".format(self.activation))
+            raise ValueError(
+                "Activation Type must be in ['Linear', 'ReLu', 'SoftPlus', 'Cos'] but is {0}"
+                .format(self.activation))
 
     def forward(self, q, der_prev):
         # Apply Affine Transformation:
         a = F.linear(q, self.weight, self.bias)
         out = self.g(a)
-        der = torch.matmul(self.g_prime(a).view(-1, self.output_size, 1) * self.weight, der_prev)
+        der = torch.matmul(
+            self.g_prime(a).view(-1, self.output_size, 1) * self.weight,
+            der_prev)
         return out, der
 
 
 class DeepRMPNetwork(nn.Module):
-
     def __init__(self, dim_M, **kwargs):
         super(DeepRMPNetwork, self).__init__()
 
@@ -194,14 +195,16 @@ class DeepRMPNetwork(nn.Module):
                 torch.nn.init.sparse_(layer.weight, p_non_zero, output_std)
 
         else:
-            raise ValueError("Weight Initialization Type must be in ['xavier_normal', 'orthogonal', 'sparse'] but is {0}".format(self._w_init))
+            raise ValueError(
+                "Weight Initialization Type must be in ['xavier_normal', 'orthogonal', 'sparse'] but is {0}"
+                .format(self._w_init))
 
         # Compute In- / Output Sizes:
         self.dim_M = dim_M
-        self.m = int((self.dim_M ** 2 + self.dim_M) / 2)
+        self.m = int((self.dim_M**2 + self.dim_M) / 2)
 
         # Compute non-zero elements of L:
-        l_output_size = int((self.dim_M ** 2 + self.dim_M) / 2)
+        l_output_size = int((self.dim_M**2 + self.dim_M) / 2)
         l_lower_size = l_output_size - self.dim_M
 
         # Calculate the indices of the diagonal elements of L:
@@ -209,7 +212,9 @@ class DeepRMPNetwork(nn.Module):
         idx_diag = idx_diag * (idx_diag + 1) / 2 - 1
 
         # Calculate the indices of the off-diagonal elements of L:
-        idx_tril = np.extract([x not in idx_diag for x in np.arange(l_output_size)], np.arange(l_output_size))
+        idx_tril = np.extract(
+            [x not in idx_diag for x in np.arange(l_output_size)],
+            np.arange(l_output_size))
 
         # Indexing for concatenation of l_o  and l_d
         cat_idx = np.hstack((idx_diag, idx_tril))
@@ -225,23 +230,32 @@ class DeepRMPNetwork(nn.Module):
         non_linearity = kwargs.get("activation", "ReLu")
 
         # Create Input Layer:
-        self.layers.append(LagrangianLayer(self.dim_M, self.n_width, activation=non_linearity))
+        self.layers.append(
+            LagrangianLayer(self.dim_M, self.n_width,
+                            activation=non_linearity))
         init_hidden(self.layers[-1])
 
         # Create Hidden Layer:
         for _ in range(1, self.n_hidden):
-            self.layers.append(LagrangianLayer(self.n_width, self.n_width, activation=non_linearity))
+            self.layers.append(
+                LagrangianLayer(self.n_width,
+                                self.n_width,
+                                activation=non_linearity))
             init_hidden(self.layers[-1])
 
         # Create output Layer:
         self.net_g = LagrangianLayer(self.n_width, 1, activation="Linear")
         init_output(self.net_g)
 
-        self.net_lo = LagrangianLayer(self.n_width, l_lower_size, activation="Linear")
+        self.net_lo = LagrangianLayer(self.n_width,
+                                      l_lower_size,
+                                      activation="Linear")
         init_hidden(self.net_lo)
 
         # The diagonal must be non-negative. Therefore, the non-linearity is set to ReLu.
-        self.net_ld = LagrangianLayer(self.n_width, self.dim_M, activation="ReLu")
+        self.net_ld = LagrangianLayer(self.n_width,
+                                      self.dim_M,
+                                      activation="ReLu")
         init_hidden(self.net_ld)
         torch.nn.init.constant_(self.net_ld.bias, self._b0_diag)
 
@@ -279,27 +293,35 @@ class DeepRMPNetwork(nn.Module):
         # Compute M:
         L = self.low_tri(l)
         LT = L.transpose(dim0=1, dim1=2)
-        M = torch.matmul(L, LT) + self._epsilon * torch.eye(self.dim_M).type_as(L)
+        M = torch.matmul(L,
+                         LT) + self._epsilon * torch.eye(self.dim_M).type_as(L)
 
         # Calculate dH/dt
         Ldt = self.low_tri(torch.matmul(der_l, qd_3d).view(-1, self.m))
-        Hdt = torch.matmul(L, Ldt.transpose(dim0=1, dim1=2)) + torch.matmul(Ldt, LT)
+        Hdt = torch.matmul(L, Ldt.transpose(dim0=1, dim1=2)) + torch.matmul(
+            Ldt, LT)
 
         # Calculate dH/dq:
-        Ldq = self.low_tri(der_l.transpose(2, 1).reshape(-1, self.m)).reshape(-1, self.dim_M, self.dim_M, self.dim_M)
-        Hdq = torch.matmul(Ldq, LT.view(-1, 1, self.dim_M, self.dim_M)) + torch.matmul(L.view(-1, 1, self.dim_M, self.dim_M), Ldq.transpose(2, 3))
+        Ldq = self.low_tri(der_l.transpose(2, 1).reshape(-1, self.m)).reshape(
+            -1, self.dim_M, self.dim_M, self.dim_M)
+        Hdq = torch.matmul(Ldq, LT.view(
+            -1, 1, self.dim_M, self.dim_M)) + torch.matmul(
+                L.view(-1, 1, self.dim_M, self.dim_M), Ldq.transpose(2, 3))
 
         # Compute the Coriolis & Centrifugal forces:
         Hdt_qd = torch.matmul(Hdt, qd_3d).view(-1, self.dim_M)
-        quad_dq = torch.matmul(qd_4d.transpose(dim0=2, dim1=3), torch.matmul(Hdq, qd_4d)).view(-1, self.dim_M)
+        quad_dq = torch.matmul(qd_4d.transpose(dim0=2, dim1=3),
+                               torch.matmul(Hdq, qd_4d)).view(-1, self.dim_M)
         c = Hdt_qd - 1. / 2. * quad_dq
 
         # Compute kinetic energy T
         H_qd = torch.matmul(M, qd_3d).view(-1, self.dim_M)
-        T = 1. / 2. * torch.matmul(qd_4d.transpose(dim0=2, dim1=3), H_qd.view(-1, 1, self.dim_M, 1)).view(-1)
+        T = 1. / 2. * torch.matmul(qd_4d.transpose(dim0=2, dim1=3),
+                                   H_qd.view(-1, 1, self.dim_M, 1)).view(-1)
 
         # Compute dV/dt
-        dVdt = torch.matmul(qd_4d.transpose(dim0=2, dim1=3), g.view(-1, 1, self.dim_M, 1)).view(-1)
+        dVdt = torch.matmul(qd_4d.transpose(dim0=2, dim1=3),
+                            g.view(-1, 1, self.dim_M, 1)).view(-1)
         return M, c, g, T, V, dVdt
 
     def rmp(self, q, qd, beta=0.5):  # beta is damping coefficient
@@ -308,7 +330,8 @@ class DeepRMPNetwork(nn.Module):
         # Compute Acceleration, e.g., forward model:
         invH = torch.inverse(M)
         # damping_term = beta * qd.view(-1, self.dim_M, 1)
-        qdd_pred = (torch.matmul(invH, (- c - g).view(-1, self.dim_M, 1))).view(-1, self.dim_M)
+        qdd_pred = (torch.matmul(invH, (-c - g).view(-1, self.dim_M,
+                                                     1))).view(-1, self.dim_M)
         return qdd_pred.squeeze()
 
     def energy(self, q, qd):

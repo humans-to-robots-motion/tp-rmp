@@ -68,6 +68,16 @@ class TPGMM(object):
                 self._mvns[k][f_key].cov[np.ix_(idxs_1, idxs_2)] = 0.0
                 self._mvns[k][f_key].cov[np.ix_(idxs_2, idxs_1)] = 0.0
 
+    def get_local_gmm(self, frame, tag=None):
+        if frame not in self.frame_names:
+            raise ValueError(f'[TPGMM]: Frame {frame} not in model!')
+        comps = range(self.num_comp) if ((self._tag_to_comp_map is None) or
+                                         (tag not in self._tag_to_comp_map)) else self.tag_to_comp_map[tag]
+        local_gmm = []
+        for k in comps:
+            local_gmm.append(self.mvns[k][frame])
+        return local_gmm
+
     def generate_global_gmm(self, frames, tag=None):
         comps = range(self.num_comp) if ((self._tag_to_comp_map is None) or
                                          (tag not in self._tag_to_comp_map)) else self.tag_to_comp_map[tag]
@@ -79,11 +89,10 @@ class TPGMM(object):
     def combine_gaussians(self, k, frames):
         if not set(self.frame_names).issubset(set(frames)):
             raise IndexError(f'[TPGMM]: Frames must be subset of {self.frame_names}')
-        man = self.mvns[k][self.frame_names[0]].manifold
         g_list = []
         for f_key in self.frame_names:
             g_list.append(self.mvns[k][f_key].transform(frames[f_key].A, frames[f_key].b))  # Transform Gaussians to global frame
-        return man.gaussian_product(g_list)
+        return self.manifold.gaussian_product(g_list)
 
     def rename_component(self, comp, name):
         self.component_names[comp] = name
@@ -119,6 +128,10 @@ class TPGMM(object):
     @property
     def mvns(self):
         return self._mvns
+
+    @property
+    def manifold(self):
+        return self._mvns[0][self._frame_names[0]].manifold
 
     @property
     def pi(self):

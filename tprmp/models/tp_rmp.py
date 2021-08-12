@@ -1,11 +1,16 @@
 import os
 import logging
 import numpy as np
+import pickle
+import time
 
 from tprmp.models.tp_hsmm import TPHSMM
+from tprmp.models.rmp import compute_policy
+from tprmp.optimizer.dynamics import optimize_dynamics
 
 
 _path_file = os.path.dirname(os.path.realpath(__file__))
+DATA_PATH = os.path.join(_path_file, '..', '..', 'data', 'tasks')
 
 
 class TPRMP(object):
@@ -21,47 +26,27 @@ class TPRMP(object):
 
     def save(self, name=None):
         self.model.save(name)
+        file = os.path.join(DATA_PATH, self.model.name, 'models', name if name is not None else ('dynamics_' + str(time.time()) + '.p'))
+        os.makedirs(file, exist_ok=True)
+        with open(file, 'wb') as f:
+            pickle.dump(self.parameters(), f)
 
     def retrieve(self, frames, **kwargs):
         """
         Retrieve global RMP.
         """
 
-    def compute_canonical_rmp(self, x, t, global_mvns, **kwargs):
-        manifold = global_mvns[0].manifold
-        K = kwargs.get('K', 10 * np.eye(manifold.dim_T))
-        hard = kwargs.get('hard', True)
-        weights = self.compute_force_weights(x, t, global_mvns, **kwargs)
-        if hard:
-            return K @ manifold.log_map(x, base=global_mvns[np.argmax(weights)].mean)
-        else:
-            phi = np.zeros((self.model.num_comp, manifold.dim_T))
-            for k in range(self.model.num_comp):
-                phi[k] = K @ manifold.log_map(x, base=global_mvns[k].mean)
-            return weights @ phi
-
-    def compute_policy(self, x, x_dot, global_mvns):
-        phi = self.compute_potentials(x, global_mvns)
-        weights = TPRMP.compute_obsrv_prob(x, global_mvns)
-        Phi = weights @ phi
-        num_comp = len(global_mvns)
-        manifold = global_mvns[0].manifold
-        Fs = np.zeros((num_comp, manifold.dim_T))
-        for k in range(num_comp):
-            Fs[k] = weights[k] * (phi[k] - Phi) * global_mvns[k].cov_inv @ manifold.log_map(x, base=global_mvns[k].mean)
-            Fs[k] += -weights[k] * global_mvns[k].cov_inv @ manifold.log_map(x, base=global_mvns[k].mean)
-            Fs[k] += -weights[k] * self._d0[k] * x_dot
-        return Fs.sum(axis=0)
-
-    def compute_potentials(self, x, global_mvns):
-        num_comp = len(global_mvns)
-        phi = np.zeros(num_comp)
-        manifold = global_mvns[0].manifold
-        for k in range(num_comp):
-            comp = global_mvns[k]
-            v = manifold.log_map(x, base=comp.mean)
-            phi[k] = self._phi0[k] + v.T @ comp.cov_inv @ v
-        return phi
+    def compute_global_policy(self, x, dx, frames):  # TODO: add Riemmanian metric
+        if not set(self.model.frame_names).issubset(set(frames)):
+            raise IndexError(f'[TPRMP]: Frames must be subset of {self.model.frame_names}')
+        policies = np.zeros((len(frames), self.model.manifold.dim_T))
+        for i, f_key in enumerate(self.model.frame_names):
+            # compute local policy
+            lx = frames[f_key].pullback(x)
+            ldx = frames[f_key].pullback_tangent(dx)
+            local_policy = compute_policy(self._phi0[f_key], self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key))
+            policies[i] = frames[f_key].transform_tangent(local_policy)
+        return policies.sum(axis=0)  # TODO: may need weighted sum based on frames
 
     def train(self, demos, **kwargs):
         """
@@ -71,22 +56,11 @@ class TPRMP(object):
         ----------
         :param demos: list of Demonstration objects
         """
+        alpha = kwargs.get('alpha', 0.5)
+        # train TP-HSMM/TP-GMM
         self.model.train(demos, **kwargs)
-
-    @staticmethod
-    def compute_obsrv_prob(obsrv, global_mvns, normalized=True):
-        """
-        Parameters
-        ----------
-        :param model_name: name of model in data/models
-        """
-        num_comp = len(global_mvns)
-        prob = np.zeros(num_comp)
-        for k in range(num_comp):
-            prob[k] = global_mvns[k].pdf(obsrv)
-        if normalized:
-            prob /= prob.sum()
-        return prob
+        # train dynamics
+        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha)
 
     @staticmethod
     def load(task_name, model_name='sample.p'):
