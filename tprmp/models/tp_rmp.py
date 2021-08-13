@@ -7,6 +7,7 @@ import time
 from tprmp.models.tp_hsmm import TPHSMM
 from tprmp.models.rmp import compute_policy
 from tprmp.optimizer.dynamics import optimize_dynamics
+from tprmp.optimizer.riemannian import optimize_riemannian_metric
 
 
 _path_file = os.path.dirname(os.path.realpath(__file__))
@@ -23,6 +24,7 @@ class TPRMP(object):
         self._model = TPHSMM(**kwargs)
         self._phi0 = None
         self._d0 = None
+        self._R_net = None
 
     def save(self, name=None):
         self.model.save(name)
@@ -61,6 +63,8 @@ class TPRMP(object):
         self.model.train(demos, **kwargs)
         # train dynamics
         self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha)
+        # train local Riemannian metrics
+        self._R_net = optimize_riemannian_metric(self, demos, **kwargs)
 
     @staticmethod
     def load(task_name, model_name='sample.p'):
@@ -80,6 +84,14 @@ class TPRMP(object):
     @property
     def model(self):
         return self._model
+
+    @property
+    def phi0(self):
+        return self._phi0
+
+    @property
+    def d0(self):
+        return self._d0
 
     @property
     def task_parameters(self):

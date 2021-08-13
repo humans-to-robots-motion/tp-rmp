@@ -1,7 +1,5 @@
 import cvxpy as cp
 import logging
-import sys
-sys.path.append('.')
 
 from tprmp.models.rmp import compute_policy
 
@@ -47,7 +45,7 @@ if __name__ == '__main__':
     from tprmp.demonstrations.manifold import Manifold
     from tprmp.demonstrations.base import Demonstration
     from tprmp.models.tp_gmm import TPGMM
-    import matplotlib.pyplot as plt
+    from tprmp.visualization.dynamics import visualize_rmp
     logging.basicConfig()
     logging.getLogger().setLevel(logging.INFO)
 
@@ -59,7 +57,7 @@ if __name__ == '__main__':
         return x, dx, ddx
 
     manifold = Manifold.get_euclidean_manifold(2)
-    num_comp = 20
+    num_comp = 10
     max_range = 4
     means = np.linspace(1, max_range, num_comp)
     var = (max_range - 1) / (2 * num_comp)
@@ -74,26 +72,7 @@ if __name__ == '__main__':
     model._mvns = mvns
     model._frame_names = ['obj']
     # test training
-    phi0, d0 = optimize_dynamics(model, [demo], alpha=0., beta=0.)
+    phi0, d0 = optimize_dynamics(model, [demo], alpha=1e-5, beta=1e-5)
     # test retrieval
-    x, dx = np.zeros(2), np.zeros(2)
-    traj, traj_vel = [x], [dx]
-    for t in range(T * 5):
-        ddx = compute_policy(phi0['obj'], d0['obj'], x, dx, model.get_local_gmm('obj'))
-        dx = ddx * dt + dx
-        x = dx * dt + x
-        traj.append(x)
-        traj_vel.append(dx)
-    traj, traj_vel = np.array(traj).T, np.array(traj_vel).T
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.plot(traj[0, :], traj[1, :], marker="o", color="b", markersize=1, linestyle='None')
-    ax.set_xlim([0, 10])
-    ax.set_ylim([0, 10])
-    ax.set_aspect('equal', 'box')
-    fig = plt.figure()
-    ax = fig.add_subplot(211)
-    ax.plot(range(T * 5 + 1), traj_vel[0, :], color='r')
-    ax = fig.add_subplot(212)
-    ax.plot(range(T * 5 + 1), traj_vel[1, :], color='g')
-    plt.show()
+    x0, dx0 = np.array([0, 0.5]), np.zeros(2)
+    visualize_rmp(phi0['obj'], d0['obj'], model.get_local_gmm('obj'), x0, dx0, T, dt, limit=10)

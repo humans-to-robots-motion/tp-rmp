@@ -6,7 +6,6 @@ import torch.nn.functional as F
 
 class LowTri:
     def __init__(self, m):
-
         # Calculate lower triangular matrix indices using numpy
         self._m = m
         self._idx = np.tril_indices(self._m)
@@ -14,7 +13,6 @@ class LowTri:
     def __call__(self, l):  # noqa
         batch_size = l.shape[0]
         self._L = torch.zeros(batch_size, self._m, self._m).type_as(l)
-
         # Assign values to matrix:
         self._L[:batch_size, self._idx[0], self._idx[1]] = l[:]
         return self._L[:batch_size]
@@ -29,7 +27,6 @@ class SoftplusDer(nn.Module):
         cx = torch.clamp(x, -20., 20.)
         exp_x = torch.exp(self._beta * cx)
         out = exp_x / (exp_x + 1.0)
-
         if torch.isnan(out).any():
             print("SoftPlus Forward output is NaN.")
         return out
@@ -83,25 +80,20 @@ class LagrangianLayer(nn.Module):
         self.output_size = output_size
         self.weight = nn.Parameter(torch.Tensor(output_size, input_size))
         self.bias = nn.Parameter(torch.Tensor(output_size))
-
         # Initialize activation function and its derivative:
         if activation == "ReLu":
             self.g = nn.ReLU()
             self.g_prime = ReLUDer()
-
         elif activation == "SoftPlus":
             self.softplus_beta = 1.0
             self.g = nn.Softplus(beta=self.softplus_beta)
             self.g_prime = SoftplusDer(beta=self.softplus_beta)
-
         elif activation == "Cos":
             self.g = Cos()
             self.g_prime = CosDer()
-
         elif activation == "Linear":
             self.g = Linear()
             self.g_prime = LinearDer()
-
         else:
             raise ValueError(
                 "Activation Type must be in ['Linear', 'ReLu', 'SoftPlus', 'Cos'] but is {0}"
@@ -111,22 +103,18 @@ class LagrangianLayer(nn.Module):
         # Apply Affine Transformation:
         a = F.linear(q, self.weight, self.bias)
         out = self.g(a)
-        der = torch.matmul(
-            self.g_prime(a).view(-1, self.output_size, 1) * self.weight,
-            der_prev)
+        der = torch.matmul(self.g_prime(a).view(-1, self.output_size, 1) * self.weight, der_prev)
         return out, der
 
 
 class DeepRMPNetwork(nn.Module):
     def __init__(self, dim_M, **kwargs):
         super(DeepRMPNetwork, self).__init__()
-
         # Read optional arguments:
         self.n_width = kwargs.get("n_width", 128)
         self.n_hidden = kwargs.get("n_depth", 2)
         self._b0 = kwargs.get("b_init", 0.1)
         self._b0_diag = kwargs.get("b_diag_init", 0.1)
-
         self._w_init = kwargs.get("w_init", "xavier_normal")
         self._g_hidden = kwargs.get("g_hidden", np.sqrt(2.))
         self._g_output = kwargs.get("g_hidden", 0.125)
