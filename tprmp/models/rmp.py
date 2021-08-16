@@ -1,6 +1,12 @@
 import numpy as np
 
 
+def compute_riemannian_metric(x, mvns):
+    weights = compute_obsrv_prob(x, mvns)
+    Ms = np.array([comp.cov_inv for comp in mvns])
+    return Ms.T @ weights 
+
+
 def compute_policy(phi0, d0, x, dx, mvns):
     weights = compute_obsrv_prob(x, mvns)
     return compute_potential_term(weights, phi0, x, mvns) + compute_dissipation_term(weights, d0, dx, mvns)
@@ -67,6 +73,9 @@ if __name__ == '__main__':
     # test semantics
     x, dx = np.zeros((2, T)), np.zeros((2, T))
     print(compute_policy(phi0, d0, x, dx, mvns).shape)
-    # test dynamics
+    # test riemannian
+    x = np.zeros((2, T))
+    print(compute_riemannian_metric(x, mvns).shape)
+    # # test dynamics
     x, dx = np.zeros(2), np.zeros(2)
     visualize_rmp(phi0, d0, mvns, x, dx, T, dt, limit=10)
