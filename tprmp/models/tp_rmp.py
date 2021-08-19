@@ -24,6 +24,7 @@ class TPRMP(object):
 
     def __init__(self, **kwargs):
         self._sigma = kwargs.pop('sigma', 1.)
+        self._d_scale = kwargs.pop('d_scale', 150.)
         self._model = TPHSMM(**kwargs)
         self._global_mvns = None
         self._phi0 = None
@@ -59,7 +60,7 @@ class TPRMP(object):
             # compute local policy
             lx = frames[f_key].pullback(x)
             ldx = frames[f_key].pullback_tangent(dx)
-            local_policy = compute_policy(self._phi0[f_key], 150 * self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key))
+            local_policy = compute_policy(self._phi0[f_key], self._d_scale * self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key))
             policies[i] = weights[f_key] * frames[f_key].transform_tangent(local_policy)
         return policies.sum(0)
     

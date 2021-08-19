@@ -15,7 +15,7 @@ from tprmp.visualization.demonstration import plot_demo  # noqa
 from tprmp.models.tp_rmp import TPRMP
 from tprmp.demonstrations.base import Demonstration
 from tprmp.demonstrations.frame import Frame
-from tprmp.demonstrations.quaternion import q_to_euler, q_convert_wxyz, q_from_euler, q_convert_xyzw  # noqa
+from tprmp.demonstrations.quaternion import q_convert_wxyz, q_from_euler, q_convert_xyzw  # noqa
 from tprmp.envs.gym import Environment # noqa
 from tprmp.envs.tasks import PalletizingBoxes # noqa
 
@@ -29,22 +29,24 @@ DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
 data_file = join(DATA_DIR, args.data)
 # parameters
 T = 300
-dt = 0.001
+dt = 0.0001
 NUM_COMP = 30
 alpha, beta = 1e-2, 0.
-min_d = 0.
+d_min = 0.
+d_scale = 150.
 energy = 0.
 sigma = 0.5
 var_scale = 2.
+r = 0.01
 # load data
 demos = load_demos(data_file, tag='pick_side')
-demos = [demos[-1]]
+demos.pop(0)
 manifold = demos[0].manifold
-# plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, show=True)
+plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, show=True)
 # train tprmp
-model = TPRMP(num_comp=NUM_COMP, name=args.task, sigma=sigma)
-model.train(demos, alpha=alpha, beta=beta, min_d=min_d, energy=energy, var_scale=var_scale)
-# model.model.plot_model(demos)
+model = TPRMP(num_comp=NUM_COMP, name=args.task, sigma=sigma, d_scale=d_scale)
+model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, var_scale=var_scale)
+model.model.plot_model(demos)
 # test tprmp
 env = Environment(task=PalletizingBoxes(), disp=True)
 ee_pose = np.array(env.home_pose)
@@ -52,7 +54,7 @@ ee_pose[3:] = q_convert_wxyz(ee_pose[3:])
 A, b = Demonstration.construct_linear_map(manifold, ee_pose)
 ee_frame = Frame(A, b, manifold=manifold)
 box_id = env.task.goals[0][0][0]
-position = np.array([0.5, -0.25, env.task.box_size[0] / 2])
+position = np.array([0.5, -0.25, env.task.box_size[0] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
 rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
 p.resetBasePositionAndOrientation(box_id, position, rotation)
 target = p.getBasePositionAndOrientation(box_id)

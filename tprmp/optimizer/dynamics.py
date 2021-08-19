@@ -6,7 +6,7 @@ from tprmp.models.rmp import compute_policy
 logger = logging.getLogger(__name__)
 
 
-def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, min_d=20., energy=10.):
+def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, d_min=20., energy=10.):
     frames = demos[0].frame_names
     gap = energy / tp_hsmm.num_comp
     phi0_frames = {}
@@ -21,7 +21,7 @@ def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, min_d=20., energy=1
             for t in range(x.shape[1]):
                 loss += cp.sum_squares(ddx[:, t] - compute_policy(phi0, d0, x[:, t], dx[:, t], tp_hsmm.get_local_gmm(frame), use_cp=True)) / x.shape[1]
         objective = cp.Minimize(loss / len(demos) + alpha * cp.pnorm(phi0, p=2)**2 + beta * cp.pnorm(d0, p=2)**2)  # L2 regularization
-        problem = cp.Problem(objective, field_constraints(phi0, d0, gap, min_d))
+        problem = cp.Problem(objective, field_constraints(phi0, d0, gap, d_min))
         problem.solve()
         logger.info(f'Opimizing dynamics for frame {frame}...')
         logger.info(f'Status: {problem.status}')
@@ -32,11 +32,11 @@ def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, min_d=20., energy=1
     return phi0_frames, d0_frames
 
 
-def field_constraints(phi0, d0, gap=0., min_d=1.):
+def field_constraints(phi0, d0, gap=0., d_min=1.):
     constraints = []
     for k in range(phi0.size - 1):
         constraints.append(phi0[k] >= phi0[k + 1] + gap)
-    constraints.extend([phi0 >= 0, d0 >= min_d])
+    constraints.extend([phi0 >= 0, d0 >= d_min])
     return constraints
 
 

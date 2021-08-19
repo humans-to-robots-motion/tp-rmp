@@ -100,3 +100,9 @@ def compute_traj_velocity(traj, dt, manifold=None):
     if d_traj.shape[1] != length:
         raise ValueError('[Trajectory]: Length of d_traj %s is not consistent with input traj length %s' % (d_traj.shape[1], length))
     return d_traj
+
+
+def interpolate(p1, p2, d_param, dist):
+    """ interpolate between points """
+    alpha = min(max(d_param / dist, 0.), 1.)
+    return (1. - alpha) * p1 + alpha * p2
