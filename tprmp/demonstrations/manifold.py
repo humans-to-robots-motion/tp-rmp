@@ -210,6 +210,36 @@ class Manifold(object):
             Manifold.logger.warn(f'Iterative likelihood maximization for mean terminated after reaching {max_iter} iterations')
         return ManifoldGaussian(self, mu, np.linalg.inv(sigma_inv))
 
+    def get_origin(self):
+        spaces = self.name.split(" x ")
+        origin = []
+        for man_name in spaces:
+            if man_name == "S^3":
+                origin.extend([1., 0., 0., 0.])
+            elif man_name[:2] == "R^":
+                n = int(man_name[2:])
+                origin.extend([0.] * n)
+            else:
+                Manifold.logger.error(f'Invalid manifold naming {man_name}.')
+        return np.array(origin)
+
+    def get_pos_quat_indices(self, tangent=False):
+        spaces = self.name.split(" x ")
+        pos_idx, quat_idx = [], []
+        i = 0
+        for man_name in spaces:
+            if man_name == "S^3":
+                r = 3 if tangent else 4
+                quat_idx.extend(range(i, i + r))
+                i += r
+            elif man_name[:2] == "R^":
+                n = int(man_name[2:])
+                pos_idx.extend(range(i, i + n))
+                i += n
+            else:
+                Manifold.logger.error(f'Invalid manifold naming {man_name}.')
+        return np.array(pos_idx), np.array(quat_idx)      
+
     @staticmethod
     def get_quaternion_manifold():
         return Manifold(4, 3, q_log_map, q_exp_map, q_parallel_transport, "S^3")

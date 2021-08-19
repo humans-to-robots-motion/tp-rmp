@@ -1,6 +1,7 @@
 import pickle
 from tprmp.demonstrations.base import Demonstration
 from tprmp.demonstrations.quaternion import q_convert_wxyz
+from tprmp.demonstrations.manifold import Manifold
 
 
 def load(demo_file):
@@ -15,25 +16,27 @@ def save_demos(demo_file, trajs, traj_vels, frames, tags, dt=0.01):
         pickle.dump(data, f)
 
 
-def load_demos(data_file):
+def load_demos(data_file, tag=None, convert_wxyz=True):
     '''Load data into Demonstration class with format xyzwxyz'''
     data = load(data_file)
     dt = data['dt']
     demos = []
-    for k, v in data['frames'].items():
-        if isinstance(v, list):
-            for m in range(len(v)):
-                v[m][3:] = q_convert_wxyz(v[m][3:])
-        else:
-            v[3:] = q_convert_wxyz(v[3:])
-    # convert to wxyz
-    for m in range(len(data['trajs'])):
-        data['trajs'][m][3:] = q_convert_wxyz(data['trajs'][m][3:])
-        demo = Demonstration(data['trajs'][m], dt=dt, tag=data['tags'][m])
+    if convert_wxyz:
         for k, v in data['frames'].items():
             if isinstance(v, list):
-                demo.add_frame_from_pose(v[m], k)
+                for m in range(len(v)):
+                    v[m][3:] = q_convert_wxyz(v[m][3:]) # convert to wxyz
             else:
-                demo.add_frame_from_pose(v, k)
+                v[3:] = q_convert_wxyz(v[3:])
+    manifold = Manifold.get_manifold_from_name('R^3 x S^3')
+    for m in range(len(data['trajs'])):
+        if tag is not None and data['tags'][m] != tag:
+            continue
+        if convert_wxyz:
+            data['trajs'][m][3:] = q_convert_wxyz(data['trajs'][m][3:])
+        demo = Demonstration(data['trajs'][m], manifold=manifold, dt=dt, tag=data['tags'][m])
+        for k, v in data['frames'].items():
+            p = v[m] if isinstance(v, list) else v
+            demo.add_frame_from_pose(p, k)
         demos.append(demo)
     return demos

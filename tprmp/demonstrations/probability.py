@@ -60,6 +60,10 @@ class ManifoldGaussian(object):
         term3 = g.cov_inv.dot(v).dot(v)
         return (term1 + term2 + term3) / 2
 
+    def recompute_inv(self):
+        self._cov_inv = np.linalg.inv(self.cov)
+        self._nf = 1 / (np.sqrt((2 * np.pi)**self.manifold.dim_T * np.linalg.det(self.cov)))
+
     @property
     def manifold(self):
         return self._manifold
@@ -75,8 +79,7 @@ class ManifoldGaussian(object):
     @cov.setter
     def cov(self, value):
         self._cov = value
-        self._cov_inv = np.linalg.inv(value)
-        self._nf = 1 / (np.sqrt((2 * np.pi)**self.manifold.dim_T * np.linalg.det(value)))
+        self.recompute_inv()
 
     @property
     def cov_inv(self):

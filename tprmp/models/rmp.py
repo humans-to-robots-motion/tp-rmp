@@ -1,5 +1,5 @@
 import numpy as np
-
+import cvxpy as cp
 
 def compute_riemannian_metric(x, mvns):
     weights = compute_obsrv_prob(x, mvns)
@@ -7,9 +7,9 @@ def compute_riemannian_metric(x, mvns):
     return Ms.T @ weights 
 
 
-def compute_policy(phi0, d0, x, dx, mvns):
+def compute_policy(phi0, d0, x, dx, mvns, use_cp=False):
     weights = compute_obsrv_prob(x, mvns)
-    return compute_potential_term(weights, phi0, x, mvns) + compute_dissipation_term(weights, d0, dx, mvns)
+    return compute_potential_term(weights, phi0, x, mvns) + compute_dissipation_term(weights, d0, dx, mvns, use_cp=use_cp)
 
 
 def compute_potential_term(weights, phi0, x, mvns):
@@ -24,11 +24,18 @@ def compute_potential_term(weights, phi0, x, mvns):
     return Ps
 
 
-def compute_dissipation_term(weights, d0, dx, mvns):
+def compute_dissipation_term(weights, d0, dx, mvns, use_cp=False):
     manifold = mvns[0].manifold
     Ds = np.zeros(manifold.dim_T) if len(dx.shape) == 1 else np.zeros((manifold.dim_T, dx.shape[1]))
     for k in range(len(mvns)):
-        Ds += -weights[k] * d0[k] * dx
+        if use_cp:
+            Ds += -weights[k] * cp.multiply(d0[k], dx)
+        else:
+            if len(dx.shape) > 1:
+                d = np.expand_dims(d0[k], axis=-1)
+            else:
+                d = d0[k]
+            Ds += -weights[k] * d * dx
     return Ds
 
 
@@ -44,15 +51,17 @@ def compute_potentials(phi0, x, mvns):
     return phi
 
 
-def compute_obsrv_prob(x, mvns, normalized=True):
+def compute_obsrv_prob(x, mvns, normalized=True, eps=1e-30):
     num_comp = len(mvns)
     prob = np.zeros(num_comp) if len(x.shape) == 1 else np.zeros((num_comp, x.shape[1]))
     for k in range(num_comp):
         prob[k] = mvns[k].pdf(x)
-    if (prob.sum() == 0.):
-        print(x)
     if normalized:
-        prob /= prob.sum()
+        s = prob.sum()
+        if s < eps:  # collapse into uniform distribution
+            prob = np.ones(num_comp) / num_comp
+        else:
+            prob /= prob.sum()
     return prob
 
 
@@ -69,7 +78,7 @@ if __name__ == '__main__':
     T = 300
     dt = 0.05
     phi0 = [5., 1., 0.]
-    d0 = .2 * np.ones(3)
+    d0 = .2 * np.ones((3, 2))
     # test semantics
     x, dx = np.zeros((2, T)), np.zeros((2, T))
     print(compute_policy(phi0, d0, x, dx, mvns).shape)
