@@ -115,6 +115,17 @@ class Environment(gym.Env):
             self.set_task(task)  # TODO: implement set_task function
             self.reset()
 
+    def get_joint_states(self):
+        joint_states = p.getJointStates(self.ur5, self.joints)
+        j = [state[0] for state in joint_states]
+        j_vel = [state[1] for state in joint_states]
+        j_torque = [state[3] for state in joint_states]
+        return j, j_vel, j_torque
+
+    def compute_ee_jacobian(self):
+        j, j_vel, j_torque = self.get_joint_states()
+        return p.calculateJacobian(self.ur5, self.ee_tip, np.zeros(3), j, j_vel, j_torque)
+
     def set_task(self, task):
         self.task = task
 
@@ -356,10 +367,8 @@ class Environment(gym.Env):
         ee_state = p.getLinkState(self.ur5, self.ee_tip, computeLinkVelocity=True, computeForwardKinematics=True)  # index of gripper is NUM_LINKS
         ee = np.array(ee_state[0] + ee_state[1])  # [x, y, z, x, y, z, w]
         ee_vel = np.array(ee_state[6] + ee_state[7])  # ee velocity
-        config_state = [p.getJointState(self.ur5, i) for i in self.joints]
-        config = np.array([config_state[i][0] for i in range(len(config_state))])
-        config_vel = np.array([config_state[i][1] for i in range(len(config_state))])
-        state = {'ee_pose': ee, 'ee_vel': ee_vel, 'config': config, 'config_vel': config_vel}
+        j, j_vel, _ = self.get_joint_states()
+        state = {'ee_pose': ee, 'ee_vel': ee_vel, 'config': j, 'config_vel': j_vel}
         return state
 
     @property
