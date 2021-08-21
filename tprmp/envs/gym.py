@@ -117,14 +117,22 @@ class Environment(gym.Env):
 
     def get_joint_states(self):
         joint_states = p.getJointStates(self.ur5, self.joints)
-        j = [state[0] for state in joint_states]
-        j_vel = [state[1] for state in joint_states]
-        j_torque = [state[3] for state in joint_states]
+        j = np.array([state[0] for state in joint_states])
+        j_vel = np.array([state[1] for state in joint_states])
+        j_torque = np.array([state[3] for state in joint_states])
         return j, j_vel, j_torque
 
-    def compute_ee_jacobian(self):
-        j, j_vel, j_torque = self.get_joint_states()
+    def compute_ee_jacobian(self, joint_states=None):
+        if joint_states is None:
+            j, j_vel, j_torque = self.get_joint_states()
+        else:
+            j, j_vel, j_torque = joint_states
         return p.calculateJacobian(self.ur5, self.ee_tip, np.zeros(3), j, j_vel, j_torque)
+
+    def forward_kinematics(self):
+        ee_state = p.getLinkState(self.ur5, self.ee_tip, computeForwardKinematics=True)
+        ee = np.array(ee_state[0] + ee_state[1])  # [x, y, z, x, y, z, w]
+        return ee
 
     def set_task(self, task):
         self.task = task
@@ -136,7 +144,7 @@ class Environment(gym.Env):
         self.obj_ids[category].append(obj_id)
         return obj_id
 
-    def movej(self, targj, speed=0.01, timeout=5, direct=False):
+    def movej(self, targj, speed=0.01, timeout=5, direct=False, wait=0.):
         """Move UR5 to target joint configuration."""
         self.moving = True
         if direct:  # should work with RealTimeSimulation
@@ -150,33 +158,36 @@ class Environment(gym.Env):
             return True
         else:
             t0 = time.time()
-            while (time.time() - t0) < timeout:
-                currj = [p.getJointState(self.ur5, i)[0] for i in self.joints]
-                currj = np.array(currj)
-                diffj = targj - currj
-                if all(np.abs(diffj) < 1e-2):
+            currj, _, _ = self.get_joint_states()
+            alpha = np.linspace(0., 1., int(1 / speed))
+            points = np.outer(alpha, targj) + np.outer((1 - alpha), currj)
+            gains = np.ones(len(self.joints))
+            steps = len(points)
+            i = 0
+            while i < steps:
+                if ((time.time() - t0) > timeout):
+                    Environment.logger.warn(f'movej exceeded {timeout} second timeout. Skipping.')
                     self.moving = False
-                    return True
-                # Move with constant velocity  #TODO:  implement variated velocity if needed
-                norm = np.linalg.norm(diffj)
-                v = diffj / norm if norm > 0 else 0
-                stepj = currj + v * speed
-                gains = np.ones(len(self.joints))
+                    return False
                 p.setJointMotorControlArray(bodyIndex=self.ur5,
                                             jointIndices=self.joints,
                                             controlMode=p.POSITION_CONTROL,
-                                            targetPositions=stepj,
+                                            targetPositions=points[i],
                                             positionGains=gains)
                 if not self.real_time_step:
                     p.stepSimulation()
-            Environment.logger.warn(f'movej exceeded {timeout} second timeout. Skipping.')
+                i += 1
+            if wait > 0.:  # to record stable points
+                now = time.time()
+                while (time.time() - now) < wait:
+                    pass
             self.moving = False
-            return False
+            return True
 
-    def movep(self, pose, speed=0.01, timeout=5, direct=False):
+    def movep(self, pose, speed=0.01, timeout=5, direct=False, wait=0.):
         """Move UR5 to target end effector pose."""
         targj = self.solve_ik(pose)
-        return self.movej(targj, speed, timeout, direct)
+        return self.movej(targj, speed, timeout, direct, wait=wait)
 
     def setp(self, pose):
         """This should work with p.stepSimulation()"""
@@ -236,15 +247,15 @@ class Environment(gym.Env):
         self.task.reset(self)
         # Re-enable rendering.
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
-        obs, _, _, _ = self.step()
-        self.home_pose = obs['ee_pose']
+        self.home_pose = self.forward_kinematics()
         # a hack to bypass computing Jacobian at step(), these variables are perfect state tracking
-        self._ee_pose = obs['ee_pose']
+        self._ee_pose = self.forward_kinematics()
         self._ee_vel = np.zeros(6, dtype=np.float32)
-        return obs
+        self._config = self.home_joint
+        self._config_vel = np.zeros(6, dtype=np.float32)
 
-    def step(self, action=None):
-        """Execute action with acceleration.
+    def step(self, action=None, return_data=True, config_space=False):
+        """Execute action with acceleration (deterministic).
             Parameters
             ----------
             :param action: action to execute.
@@ -254,21 +265,36 @@ class Environment(gym.Env):
         """
         if action is None:
             return self.robot_state, 0, False, {}
-        ee, ee_vel = self.ee_pose, self.ee_vel  # NOTE: self.ee_vel is a hack to bypass computing Jacobian
-        ee_vel += action / self.sampling_hz
-        ee_wxyz = np.append(ee[:3], q_convert_wxyz(ee[3:]))
-        ee_wxyz = self.manifold.exp_map(ee_vel, base=ee_wxyz)
-        ee = np.append(ee_wxyz[:3], q_convert_xyzw(ee_wxyz[3:]))
-        self.setp(ee)
-        self._ee_pose = ee
-        self._ee_vel = ee_vel
-        # Get task rewards.
-        reward, info = self.task.reward() if action is not None else (0, {})
-        done = self.task.done()
-        # Add ground truth robot state into info.
-        info.update(self.info)
-        obs = self.robot_state
-        return obs, reward, done, info
+        dt = 1 / self.sampling_hz
+        if config_space:
+            j, j_vel = self.config, self.config_vel
+            j_vel += action * dt
+            j += j_vel * dt
+            self._config = j
+            self._config_vel = j_vel
+            ee = self.forward_kinematics()
+            joint_states = (j, j_vel, np.zeros_like(j))
+            J_pos, J_rot = self.compute_ee_jacobian(joint_states)
+            J_pos, J_rot = np.array(J_pos), np.array(J_rot)
+            self._ee_pose = ee
+            self._ee_vel = np.append(J_pos @ j_vel, J_rot @ j_vel)
+        else:
+            ee, ee_vel = self.ee_pose, self.ee_vel  # NOTE: self.ee_vel is a hack to bypass computing Jacobian, hence config_vel is not updated
+            ee_vel += action * dt
+            ee_wxyz = np.append(ee[:3], q_convert_wxyz(ee[3:]))
+            ee_wxyz = self.manifold.exp_map(ee_vel * dt, base=ee_wxyz)
+            ee = np.append(ee_wxyz[:3], q_convert_xyzw(ee_wxyz[3:]))
+            self.setp(ee)
+            self._ee_pose = ee
+            self._ee_vel = ee_vel
+        if return_data:
+            # Get task rewards.
+            reward, info = self.task.reward() if action is not None else (0, {})
+            done = self.task.done()
+            # Add ground truth robot state into info.
+            info.update(self.info)
+            obs = self.robot_state
+            return obs, reward, done, info
 
     def render(self, mode='rgb_array'):
         # Render only the color image from the first camera.
@@ -364,6 +390,7 @@ class Environment(gym.Env):
 
     @property
     def robot_state(self):
+        '''Simulation state'''
         ee_state = p.getLinkState(self.ur5, self.ee_tip, computeLinkVelocity=True, computeForwardKinematics=True)  # index of gripper is NUM_LINKS
         ee = np.array(ee_state[0] + ee_state[1])  # [x, y, z, x, y, z, w]
         ee_vel = np.array(ee_state[6] + ee_state[7])  # ee velocity
@@ -378,3 +405,11 @@ class Environment(gym.Env):
     @property
     def ee_vel(self):
         return self._ee_vel
+
+    @property
+    def config(self):
+        return self._config
+
+    @property
+    def config_vel(self):
+        return self._config_vel

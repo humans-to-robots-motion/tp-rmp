@@ -1,12 +1,18 @@
 import cvxpy as cp
+import numpy as np
 import logging
 
-from tprmp.models.rmp import compute_policy
+from tprmp.models.rmp import compute_policy  # , compute_riemannian_metric
 
 logger = logging.getLogger(__name__)
 
 
-def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, d_min=20., energy=10.):
+def optimize_dynamics(tp_hsmm, demos, **kwargs):
+    alpha = kwargs.get('alpha', 1e-5)
+    beta = kwargs.get('beta', 1e-5)
+    stiff_scale = kwargs.get('stiff_scale', 2.)
+    d_min = kwargs.get('d_min', 0.)
+    energy = kwargs.get('alpha', 0.)
     frames = demos[0].frame_names
     gap = energy / tp_hsmm.num_comp
     phi0_frames = {}
@@ -19,8 +25,16 @@ def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, d_min=20., energy=1
             trajs = demo.traj_in_frames[frame]
             x, dx, ddx = trajs['traj'], trajs['d_traj'], trajs['dd_traj']
             for t in range(x.shape[1]):
-                loss += cp.sum_squares(ddx[:, t] - compute_policy(phi0, d0, x[:, t], dx[:, t], tp_hsmm.get_local_gmm(frame), use_cp=True)) / x.shape[1]
-        objective = cp.Minimize(loss / len(demos) + alpha * cp.pnorm(phi0, p=2)**2 + beta * cp.pnorm(d0, p=2)**2)  # L2 regularization
+                mvns = tp_hsmm.get_local_gmm(frame)
+                # M = compute_riemannian_metric(x[:, t], mvns)
+                f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, use_cp=True)
+                loss += cp.norm(ddx[:, t] - f) / x.shape[1]
+        loss /= len(demos)
+        if alpha > 0.:
+            loss += alpha * cp.pnorm(phi0, p=2)**2
+        if beta > 0.:
+            loss += beta * cp.pnorm(d0, p=2)**2
+        objective = cp.Minimize(loss)  # L2 regularization
         problem = cp.Problem(objective, field_constraints(phi0, d0, gap, d_min))
         problem.solve()
         logger.info(f'Opimizing dynamics for frame {frame}...')
@@ -32,16 +46,15 @@ def optimize_dynamics(tp_hsmm, demos, alpha=1e-5, beta=1e-5, d_min=20., energy=1
     return phi0_frames, d0_frames
 
 
-def field_constraints(phi0, d0, gap=0., d_min=1.):
+def field_constraints(phi0, d0, gap=0., d_min=0.):
     constraints = []
     for k in range(phi0.size - 1):
-        constraints.append(phi0[k] >= phi0[k + 1] + gap)
+        constraints.append(phi0[k] >= (phi0[k + 1] + gap))
     constraints.extend([phi0 >= 0, d0 >= d_min])
     return constraints
 
 
 if __name__ == '__main__':
-    import numpy as np
     from tprmp.demonstrations.probability import ManifoldGaussian
     from tprmp.demonstrations.manifold import Manifold
     from tprmp.demonstrations.base import Demonstration

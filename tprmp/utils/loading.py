@@ -25,7 +25,7 @@ def load_demos(data_file, tag=None, convert_wxyz=True):
         for k, v in data['frames'].items():
             if isinstance(v, list):
                 for m in range(len(v)):
-                    v[m][3:] = q_convert_wxyz(v[m][3:]) # convert to wxyz
+                    v[m][3:] = q_convert_wxyz(v[m][3:])  # convert to wxyz
             else:
                 v[3:] = q_convert_wxyz(v[3:])
     manifold = Manifold.get_manifold_from_name('R^3 x S^3')

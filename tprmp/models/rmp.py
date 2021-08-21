@@ -1,18 +1,19 @@
 import numpy as np
 import cvxpy as cp
 
+
 def compute_riemannian_metric(x, mvns):
     weights = compute_obsrv_prob(x, mvns)
     Ms = np.array([comp.cov_inv for comp in mvns])
-    return Ms.T @ weights 
+    return Ms.T @ weights
 
 
-def compute_policy(phi0, d0, x, dx, mvns, use_cp=False):
+def compute_policy(phi0, d0, x, dx, mvns, stiff_scale=2., use_cp=False):
     weights = compute_obsrv_prob(x, mvns)
-    return compute_potential_term(weights, phi0, x, mvns) + compute_dissipation_term(weights, d0, dx, mvns, use_cp=use_cp)
+    return compute_potential_term(weights, phi0, x, mvns, stiff_scale=stiff_scale) + compute_dissipation_term(weights, d0, dx, mvns, use_cp=use_cp)
 
 
-def compute_potential_term(weights, phi0, x, mvns):
+def compute_potential_term(weights, phi0, x, mvns, stiff_scale=2.):
     phi = compute_potentials(phi0, x, mvns)
     Phi = weights.T @ phi if len(x.shape) == 1 else np.diag(weights.T @ phi)
     num_comp = len(mvns)
@@ -20,7 +21,7 @@ def compute_potential_term(weights, phi0, x, mvns):
     Ps = np.zeros(manifold.dim_T) if len(x.shape) == 1 else np.zeros((manifold.dim_T, x.shape[1]))
     for k in range(num_comp):
         Ps += weights[k] * (phi[k] - Phi) * (mvns[k].cov_inv @ manifold.log_map(x, base=mvns[k].mean))
-        Ps += -weights[k] * (mvns[k].cov_inv @ manifold.log_map(x, base=mvns[k].mean))
+        Ps += -weights[k] * (stiff_scale * mvns[k].cov_inv @ manifold.log_map(x, base=mvns[k].mean))
     return Ps
 
 
@@ -58,8 +59,10 @@ def compute_obsrv_prob(x, mvns, normalized=True, eps=1e-30):
         prob[k] = mvns[k].pdf(x)
     if normalized:
         s = prob.sum()
-        if s < eps:  # collapse into uniform distribution
-            prob = np.ones(num_comp) / num_comp
+        if s < eps:  # use distance as metric to compute prob
+            manifold = mvns[0].manifold
+            dist = np.array([np.linalg.norm(manifold.log_map(x, base=mvns[k].mean)) for k in range(len(mvns))])
+            prob = dist / dist.sum()
         else:
             prob /= prob.sum()
     return prob

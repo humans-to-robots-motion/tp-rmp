@@ -2,6 +2,7 @@ import numpy as np
 
 from tprmp.models.rmp import compute_obsrv_prob
 
+
 def compute_coriolis_force(x, dx, mvns):
     weights = compute_obsrv_prob(x, mvns)
     return compute_dMdt_term(weights, x, dx, mvns) - compute_dTdx_term(weights, x, dx, mvns)
@@ -18,6 +19,7 @@ def compute_dMdt_term(weights, x, dx, mvns):
     dMdt = Ms.T @ (weights * scale)
     return dMdt @ dx
 
+
 def compute_dTdx_term(weights, x, dx, mvns):
     manifold = mvns[0].manifold
     dim_T = manifold.dim_T
@@ -30,7 +32,7 @@ def compute_dTdx_term(weights, x, dx, mvns):
         weighted_term = weights.T @ terms[:, i]
         scale = weighted_term - terms[:, i]
         dMdxi = Ms.T @ (weights * scale)
-        dTdx[i] = dx.T @ dMdxi @ dx 
+        dTdx[i] = dx.T @ dMdxi @ dx
     return 1. / 2. * dTdx
 
 

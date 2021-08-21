@@ -24,7 +24,8 @@ class TPRMP(object):
 
     def __init__(self, **kwargs):
         self._sigma = kwargs.pop('sigma', 1.)
-        self._d_scale = kwargs.pop('d_scale', 150.)
+        self._stiff_scale = kwargs.pop('stiff_scale', 2.)
+        self._d_scale = kwargs.pop('d_scale', 1.)
         self._model = TPHSMM(**kwargs)
         self._global_mvns = None
         self._phi0 = None
@@ -37,11 +38,18 @@ class TPRMP(object):
         os.makedirs(file, exist_ok=True)
         with open(file, 'wb') as f:
             pickle.dump({'phi0': self._phi0, 'd0': self._d0}, f)
-    
+
     def generate_global_gmm(self, frames):
         self._global_mvns = self.model.generate_global_gmm(frames)
 
     def retrieve(self, x, dx, frames, compute_global_mvns=False):
+        """
+        Retrieve global RMP canonical form.
+        """
+        M, f = self.rmp(x, dx, frames, compute_global_mvns=compute_global_mvns)
+        return np.linalg.inv(M) @ f
+
+    def rmp(self, x, dx, frames, compute_global_mvns=False):
         """
         Retrieve global RMP.
         """
@@ -49,7 +57,7 @@ class TPRMP(object):
             self.generate_global_gmm(frames)
         f = self.compute_global_policy(x, dx, frames) - compute_coriolis_force(x, dx, self._global_mvns)
         M = compute_riemannian_metric(x, self._global_mvns)
-        return np.linalg.inv(M) @ f
+        return M, f
 
     def compute_global_policy(self, x, dx, frames):
         if not set(self.model.frame_names).issubset(set(frames)):
@@ -60,25 +68,29 @@ class TPRMP(object):
             # compute local policy
             lx = frames[f_key].pullback(x)
             ldx = frames[f_key].pullback_tangent(dx)
-            local_policy = compute_policy(self._phi0[f_key], self._d_scale * self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key))
+            local_policy = compute_policy(self._phi0[f_key], self._d_scale * self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key), stiff_scale=self._stiff_scale)
             policies[i] = weights[f_key] * frames[f_key].transform_tangent(local_policy)
         return policies.sum(0)
-    
+
     def compute_frame_weights(self, x, frames, normalized=True, eps=1e-30):
         origin = self.model.manifold.get_origin()
         frame_origins = {k: v.transform(origin) for k, v in frames.items()}
         weights = {}
-        s = 0.
         for f, o in frame_origins.items():
             v = self.model.manifold.log_map(x, base=o)
             w = np.exp(-v.T @ v / (2 * self._sigma ** 2))
             weights[f] = w
-            s += w
+        s = sum(weights.values())
         if normalized:
-            for f in weights:
-                if s < eps:  # collapse to equal distribution
-                    weights[f] = 1. / len(weights)
-                else:
+            if s < eps:  # use distance as metric to compute prob
+                for f in weights:
+                    d = np.linalg.norm(self.model.manifold.log_map(x, base=frame_origins[f]))
+                    weights[f] = d
+                norm_dist = sum(weights.values())
+                for f in weights:
+                    weights[f] /= norm_dist
+            else:
+                for f in weights:
                     weights[f] /= s
         return weights
 
@@ -103,7 +115,7 @@ class TPRMP(object):
         if var_scale > 1.:
             self.model.scale_covariance(var_scale)
         # train dynamics
-        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha, beta, min_d, energy)
+        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha=alpha, beta=beta, stiff_scale=self._stiff_scale, min_d=min_d, energy=energy)
         # train local Riemannian metrics TODO: RiemannianNetwork is still under consideration
         # self._R_net = optimize_riemannian_metric(self, demos, **kwargs)
 

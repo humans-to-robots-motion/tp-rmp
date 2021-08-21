@@ -26,16 +26,16 @@ args = parser.parse_args()
 
 env = Environment(task=PalletizingBoxes(), disp=True, real_time_step=True)
 margin = 0.0009
-speed = 0.01
+speed = 0.000005
 timeout = 10
 direct = False
 
 save_path = join(ROOT_DIR, 'data', 'tasks', 'pick', 'demos')
 os.makedirs(save_path, exist_ok=True)
-save_name = join(save_path, args.n + '.p')
+save_name = join(save_path, args.n)
 manifold = Manifold.get_manifold_from_name('R^3 x S^3')
 box_id = env.task.goals[0][0][0]
-r = 0.1
+r = 0.01
 trajs = []
 traj_vels = []
 tags = []
@@ -43,25 +43,29 @@ obj_frames = []
 # grasp top
 pose_mean = np.array([0.5, -0.25, env.task.box_size[2] / 2])
 for _ in range(args.num):
-    theta = np.random.random() * 2 * np.pi
-    rotation = q_convert_xyzw(q_from_euler(np.array([0., 0., theta])))
+    # theta = np.random.random() * 2 * np.pi
+    # rotation = q_convert_xyzw(q_from_euler(np.array([0., 0., 0.])))
+    rotation = np.array([0., 0., 0., 1.])
     position = pose_mean + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
     p.resetBasePositionAndOrientation(box_id, position, rotation)
     target = p.getBasePositionAndOrientation(box_id)
     pose = np.append(target[0], target[1])
     pose[2] += env.task.box_size[2] / 2 + margin
+    for _ in range(100):  # stabilize arm
+        p.stepSimulation()
+    input()
     res = env.record_trajectory()
-    env.movep(pose, speed=speed, timeout=timeout, direct=direct)
+    env.movep(pose, speed=speed, timeout=timeout, direct=direct, wait=2.)
     traj, traj_vel = res.result()
-    env.movep(env.home_pose, speed=speed, timeout=timeout, direct=direct)
+    env.reset()
     trajs.append(traj)
     traj_vels.append(traj_vel)
+    print(traj.shape)
     tags.append('pick_top')
     obj_frames.append(np.append(target[0], target[1]))
 # grasp side
 pose_mean = np.array([0.5, -0.25, env.task.box_size[0] / 2])
 for _ in range(args.num):
-    theta = np.random.random() * 2 * np.pi
     rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
     position = pose_mean + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
     p.resetBasePositionAndOrientation(box_id, position, rotation)
@@ -73,10 +77,13 @@ for _ in range(args.num):
     pose = obj_frame.transform(np.append([0., 0., 0.], q_from_euler(np.array([-np.pi/2, 0., 0.]))))
     pose[3:] = q_convert_xyzw(pose[3:])
     pose[2] += env.task.box_size[0] / 2 + margin
+    for _ in range(100):  # stabilize arm
+        p.stepSimulation()
+    input()
     res = env.record_trajectory()
     env.movep(pose, speed=speed, timeout=timeout, direct=direct)
     traj, traj_vel = res.result()
-    env.movep(env.home_pose, speed=speed, timeout=timeout, direct=direct)
+    env.reset()
     trajs.append(traj)
     traj_vels.append(traj_vel)
     tags.append('pick_side')
