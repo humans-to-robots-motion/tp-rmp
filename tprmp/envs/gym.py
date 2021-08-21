@@ -115,11 +115,13 @@ class Environment(gym.Env):
             self.set_task(task)  # TODO: implement set_task function
             self.reset()
 
-    def get_joint_states(self):
+    def get_joint_states(self, np_array=False):
         joint_states = p.getJointStates(self.ur5, self.joints)
-        j = np.array([state[0] for state in joint_states])
-        j_vel = np.array([state[1] for state in joint_states])
-        j_torque = np.array([state[3] for state in joint_states])
+        j = [state[0] for state in joint_states]
+        j_vel = [state[1] for state in joint_states]
+        j_torque = [state[3] for state in joint_states]
+        if np_array:
+            j, j_vel, j_torque = np.array(j), np.array(j_vel), np.array(j_torque)
         return j, j_vel, j_torque
 
     def compute_ee_jacobian(self, joint_states=None):
@@ -158,7 +160,7 @@ class Environment(gym.Env):
             return True
         else:
             t0 = time.time()
-            currj, _, _ = self.get_joint_states()
+            currj, _, _ = self.get_joint_states(np_array=True)
             alpha = np.linspace(0., 1., int(1 / speed))
             points = np.outer(alpha, targj) + np.outer((1 - alpha), currj)
             gains = np.ones(len(self.joints))
