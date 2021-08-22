@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 import numpy as np
 import logging
 
@@ -23,56 +24,72 @@ def plot_gmm(model, frames, only_global=True, legend=True, new_fig=False, show=F
 def _plot_gmm_global(model, frames, **kwargs):
     plot_quat = kwargs.get('plot_quat', False)
     tag = kwargs.get('tag', None)
-    plt.subplot(111, projection="3d")
+    three_d = kwargs.get('three_d', True)
+    new_ax = kwargs.get('new_ax', True)
+    if new_ax:
+        if three_d:
+            plt.subplot(111, projection="3d")
+        else:
+            plt.subplot(111)
     global_mvns = model.generate_global_gmm(frames, tag=tag)
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     for k in range(len(global_mvns)):  # TODO: change to multiple cluster with tags
-        _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)])
-        if plot_quat:
+        _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)], three_d=three_d)
+        if three_d and plot_quat:
             plot_frame(global_mvns[k].mean[-4:], global_mvns[k].mean[:3], length_scale=0.02, alpha=0.8)
 
 
-def _plot_gmm_frames(model, frames, **kwargs):
+def _plot_gmm_frames(model, frames, axs=None, **kwargs):
     plot_quat = kwargs.get('plot_quat', False)
     tag = kwargs.get('tag', None)
-    if len(plt.gcf().get_axes()) != len(frames):
+    three_d = kwargs.get('three_d', True)
+    if axs is None:
         plt.clf()
         axs = {}
         for i, frame in enumerate(frames):
-            axs[frame] = plt.subplot(1, model.num_frames, i + 1, projection="3d")
+            if three_d:
+                axs[frame] = plt.subplot(1, model.num_frames, i + 1, projection="3d")
+            else:
+                axs[frame] = plt.subplot(1, model.num_frames, i + 1)
             plt.title(f'Frame {frame}')
-    else:
-        axs_list = plt.gcf().get_axes()
-        axs = {}
-        for i, frame in enumerate(frames):
-            axs[frame] = axs_list[i]
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     for frame in frames:
         plt.sca(axs[frame])
         comps = range(model.num_comp) if ((model.tag_to_comp_map is None) or
                                           (tag not in model.tag_to_comp_map)) else model.tag_to_comp_map[tag]
         for k in comps:  # TODO: change to multiple cluster with tags
-            _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)])
-            if plot_quat:
+            _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)], three_d=three_d)
+            if three_d and plot_quat:
                 plot_frame(model.mvns[k][frame].mean[-4:], model.mvns[k][frame].mean[:3], length_scale=0.02, alpha=0.8)
 
 
-def _plot_gaussian(mvn, color='b'):
-    mu = mvn.mean[:3]
-    cov = mvn.cov[:3, :3]
-    center = mu[0:3]
-    _, s, rotation = np.linalg.svd(cov)
-    radii = np.sqrt(s)
-    u = np.linspace(0.0, 2.0 * np.pi, 100)
-    v = np.linspace(0.0, np.pi, 100)
-    x = radii[0] * np.outer(np.cos(u), np.sin(v))
-    y = radii[1] * np.outer(np.sin(u), np.sin(v))
-    z = radii[2] * np.outer(np.ones_like(u), np.cos(v))
-    for i in range(len(x)):
-        for j in range(len(x)):
-            [x[i, j], y[i, j], z[i, j]] = np.dot([x[i, j], y[i, j], z[i, j]], rotation) + center
-    plt.gca().plot_wireframe(x, y, z, rstride=4, cstride=4, alpha=0.3, color=color)
-    plt.plot([mu[0]], [mu[1]], [mu[2]], marker='o', color=color)
+def _plot_gaussian(mvn, color='b', three_d=True):
+    if three_d:
+        mu = mvn.mean[:3]
+        cov = mvn.cov[:3, :3]
+        center = mu[0:3]
+        _, s, rotation = np.linalg.svd(cov)
+        radii = np.sqrt(s)
+        u = np.linspace(0.0, 2.0 * np.pi, 100)
+        v = np.linspace(0.0, np.pi, 100)
+        x = radii[0] * np.outer(np.cos(u), np.sin(v))
+        y = radii[1] * np.outer(np.sin(u), np.sin(v))
+        z = radii[2] * np.outer(np.ones_like(u), np.cos(v))
+        for i in range(len(x)):
+            for j in range(len(x)):
+                [x[i, j], y[i, j], z[i, j]] = np.dot([x[i, j], y[i, j], z[i, j]], rotation) + center
+        plt.gca().plot_wireframe(x, y, z, rstride=4, cstride=4, alpha=0.3, color=color)
+        plt.plot([mu[0]], [mu[1]], [mu[2]], marker='o', color=color)
+    else:
+        mu = mvn.mean[:2]
+        cov = mvn.cov[:2, :2]
+        w, v = np.linalg.eig(cov)
+        x, y = v[:, 0]
+        theta = float(np.degrees(np.arctan2(y, x)))
+        width, height = 2 * np.sqrt(w)
+        ellipse = Ellipse(mu[0:2], width, height, angle=theta, color=color, fill=True)
+        plt.gca().add_patch(ellipse)
+        plt.scatter([mu[0]], [mu[1]], marker='o', color=color, alpha=0.5)
 
 
 def plot_hsmm(model, end_states=True, legend=True, duration=True, new_fig=False, show=False):  # TODO: check plotting locations

@@ -2,7 +2,7 @@ import cvxpy as cp
 import numpy as np
 import logging
 
-from tprmp.models.rmp import compute_policy  # , compute_riemannian_metric
+from tprmp.models.rmp import compute_policy, compute_riemannian_metric
 
 logger = logging.getLogger(__name__)
 
@@ -10,9 +10,13 @@ logger = logging.getLogger(__name__)
 def optimize_dynamics(tp_hsmm, demos, **kwargs):
     alpha = kwargs.get('alpha', 1e-5)
     beta = kwargs.get('beta', 1e-5)
-    stiff_scale = kwargs.get('stiff_scale', 2.)
+    stiff_scale = kwargs.get('stiff_scale', 1.)
+    tau = kwargs.get('tau', 1.)
+    potential_method = kwargs.get('potential_method', 'quadratic')
     d_min = kwargs.get('d_min', 0.)
-    energy = kwargs.get('alpha', 0.)
+    energy = kwargs.get('energy', 0.)
+    optimize_method = kwargs.get('optimize_method', 'flow')
+    verbose = kwargs.get('verbose', False)
     frames = demos[0].frame_names
     gap = energy / tp_hsmm.num_comp
     phi0_frames = {}
@@ -26,9 +30,15 @@ def optimize_dynamics(tp_hsmm, demos, **kwargs):
             x, dx, ddx = trajs['traj'], trajs['d_traj'], trajs['dd_traj']
             for t in range(x.shape[1]):
                 mvns = tp_hsmm.get_local_gmm(frame)
-                # M = compute_riemannian_metric(x[:, t], mvns)
-                f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, use_cp=True)
-                loss += cp.norm(ddx[:, t] - f) / x.shape[1]
+                if optimize_method == 'flow':
+                    M_inv = np.eye(tp_hsmm.manifold.dim_T)
+                elif optimize_method == 'riemannian':
+                    M = compute_riemannian_metric(x[:, t], mvns)
+                    M_inv = np.linalg.inv(M)
+                else:
+                    raise ValueError(f'Optimizing method {optimize_method} is not regconized!')
+                f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, use_cp=True)
+                loss += cp.norm(ddx[:, t] - M_inv @ f) / x.shape[1]
         loss /= len(demos)
         if alpha > 0.:
             loss += alpha * cp.pnorm(phi0, p=2)**2
@@ -36,7 +46,7 @@ def optimize_dynamics(tp_hsmm, demos, **kwargs):
             loss += beta * cp.pnorm(d0, p=2)**2
         objective = cp.Minimize(loss)  # L2 regularization
         problem = cp.Problem(objective, field_constraints(phi0, d0, gap, d_min))
-        problem.solve()
+        problem.solve(verbose=verbose)
         logger.info(f'Opimizing dynamics for frame {frame}...')
         logger.info(f'Status: {problem.status}')
         logger.info(f'Optimal phi0: {phi0.value}')
@@ -59,7 +69,7 @@ if __name__ == '__main__':
     from tprmp.demonstrations.manifold import Manifold
     from tprmp.demonstrations.base import Demonstration
     from tprmp.models.tp_gmm import TPGMM
-    from tprmp.visualization.dynamics import visualize_rmp
+    # from tprmp.visualization.dynamics import visualize_rmp
     logging.basicConfig()
     logging.getLogger().setLevel(logging.INFO)
 
@@ -88,5 +98,5 @@ if __name__ == '__main__':
     # test training
     phi0, d0 = optimize_dynamics(model, [demo], alpha=1e-5, beta=1e-5)
     # test retrieval
-    x0, dx0 = np.array([0, 0.5]), np.zeros(2)
-    visualize_rmp(phi0['obj'], d0['obj'], model.get_local_gmm('obj'), x0, dx0, T, dt, limit=10)
+    # x0, dx0 = np.array([0, 0.5]), np.zeros(2)
+    # visualize_rmp(phi0['obj'], d0['obj'], model.get_local_gmm('obj'), x0, dx0, T, dt, limit=10)

@@ -178,6 +178,14 @@ class Demonstration(object):
     def traj(self):
         return self._traj
 
+    @property
+    def d_traj(self):
+        return self._d_traj
+
+    @property
+    def dd_traj(self):
+        return self._dd_traj
+
     @traj.setter
     def traj(self, value):
         if isinstance(value, list):

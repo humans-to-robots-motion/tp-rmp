@@ -104,15 +104,16 @@ class TPHSMM(TPGMM):
         model_params['end_states'] = model_params['end_states'] / model_params['end_states'].sum()
         self.set_params(model_params)
 
-    def plot_model(self, demos, tagging=True, plot_quat=False, show=True):
+    def plot_model(self, demos, tagging=True, plot_transition=False, plot_quat=False, three_d=True, show=True):
         if isinstance(demos, Demonstration):
             demos = [demos]
-        plot_hsmm(self, new_fig=True, show=show)
+        if plot_transition:
+            plot_hsmm(self, new_fig=True, show=show)
         tag_to_demos = TPHSMM.compute_tag_to_demo(demos)
         for tag in tag_to_demos:  # plot one demo for each tag
             demo = tag_to_demos[tag][0]
-            plot_demo(demo, plot_quat=plot_quat, new_fig=True, new_ax=True, show=False)
-            plot_gmm(self, demo.get_task_parameters(), plot_quat=plot_quat, tag=tag if tagging else None, new_fig=False, show=show)
+            plot_demo(demo, plot_quat=plot_quat, new_fig=True, new_ax=True, three_d=three_d, show=False)
+            plot_gmm(self, demo.get_task_parameters(), plot_quat=plot_quat, tag=tag if tagging else None, new_fig=False, three_d=three_d, show=show)
 
     def set_params(self, model_params):
         super(TPHSMM, self).set_params(model_params)
