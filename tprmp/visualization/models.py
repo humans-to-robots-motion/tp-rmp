@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
+import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
 import logging
 
@@ -88,8 +89,11 @@ def _plot_gaussian(mvn, color='b', three_d=True):
         theta = float(np.degrees(np.arctan2(y, x)))
         width, height = 2 * np.sqrt(w)
         ellipse = Ellipse(mu[0:2], width, height, angle=theta, color=color, fill=True)
-        plt.gca().add_patch(ellipse)
-        plt.scatter([mu[0]], [mu[1]], marker='o', color=color, alpha=0.5)
+        ax = plt.gca()
+        ax.add_patch(ellipse)
+        if ax.name == '3d':
+            art3d.pathpatch_2d_to_3d(ellipse, z=0, zdir='z')
+        plt.plot([mu[0]], [mu[1]], marker='o', color=color)
 
 
 def plot_hsmm(model, end_states=True, legend=True, duration=True, new_fig=False, show=False):  # TODO: check plotting locations

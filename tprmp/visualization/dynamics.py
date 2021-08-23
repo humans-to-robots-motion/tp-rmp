@@ -48,7 +48,8 @@ def visualize_rmp(tprmp, frames, x0, dx0, T, dt, sample=None, x_limits=[0., 5.],
 
 def plot_potential_field(tprmp, frames, **kwargs):
     only_global = kwargs.get('only_global', True)
-    plot_gaussian = kwargs.get('plot_gaussian', 0.1)
+    plot_gaussian = kwargs.get('plot_gaussian', True)
+    three_d = kwargs.get('three_d', False)
     margin = kwargs.get('margin', 0.5)
     res = kwargs.get('res', 0.1)
     new_fig = kwargs.get('new_fig', False)
@@ -60,15 +61,20 @@ def plot_potential_field(tprmp, frames, **kwargs):
     mid_y = (frame_origins[:, 1].max() + frame_origins[:, 1].min()) * 0.5
     if new_fig:
         plt.figure()
-    _plot_potential_field_global(tprmp, frames, [mid_x, mid_y], ranges, plot_gaussian=plot_gaussian, res=res)
+    _plot_potential_field_global(tprmp, frames, [mid_x, mid_y], ranges, plot_gaussian=plot_gaussian, three_d=three_d, res=res)
     if not only_global:
-        _plot_potential_field_frames(tprmp, frames, ranges, res=res)
+        if three_d:
+            plt.figure()
+        _plot_potential_field_frames(tprmp, frames, ranges, plot_gaussian=plot_gaussian, three_d=three_d, res=res)
     if show:
         plt.show()
 
 
-def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, res=0.1, alpha=0.5):
-    ax = plt.subplot(111)
+def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, three_d=False, res=0.1, alpha=0.7):
+    if three_d:
+        ax = plt.subplot(111, projection='3d')
+    else:
+        ax = plt.subplot(111)
     x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
     y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
     X, Y = np.meshgrid(x, y)
@@ -76,21 +82,29 @@ def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True,
     for i in range(X.shape[0]):
         for j in range(X.shape[1]):
             Z[i, j] = tprmp.compute_potential_field(np.array([X[i, j], Y[i, j]]), frames)
-    c = ax.pcolormesh(X, Y, Z, cmap='RdBu', shading='auto', vmin=0., vmax=Z.max(), alpha=alpha)
+    if three_d:
+        c = ax.plot_surface(X, Y, Z, cmap='RdBu', vmin=0., vmax=Z.max(), alpha=alpha)
+    else:
+        c = ax.pcolormesh(X, Y, Z, cmap='RdBu', shading='auto', vmin=0., vmax=Z.max(), alpha=alpha)
+        ax.axes.set_aspect('equal')
     ax.set_title('Global potential Phi')
     plt.gcf().colorbar(c, ax=ax)
     plot_frame_2d(frames.values())
-    ax.axes.set_aspect('equal')
     if plot_gaussian:
         _plot_gmm_global(tprmp.model, frames, three_d=False, new_ax=False)
 
 
-def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=True, res=0.1, alpha=0.5):
+def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=True, three_d=False, res=0.1, alpha=0.7):
     if axs is None:
         axs = {}
-        _, axes = plt.subplots(1, len(frames), figsize=(14, 6))
-        for i, frame in enumerate(frames):
-            axs[frame] = axes[i]
+        if three_d:
+            plt.clf()
+            for i, frame in enumerate(frames):
+                axs[frame] = plt.subplot(1, len(frames), i + 1, projection="3d")
+        else:
+            _, axes = plt.subplots(1, len(frames), figsize=(14, 6))
+            for i, frame in enumerate(frames):
+                axs[frame] = axes[i]
     x = y = np.arange(-ranges * 2, ranges * 2, res)
     X, Y = np.meshgrid(x, y)
     Z = {}
@@ -102,11 +116,14 @@ def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=
                 Z[f_key][i, j] = tprmp.compute_potential_field_frame(np.array([X[i, j], Y[i, j]]), f_key)
         z_max = max(z_max, Z[f_key].max())
     for f_key in frames:
-        c = axs[f_key].pcolormesh(X, Y, Z[f_key], cmap='RdBu', shading='auto', vmin=0., vmax=z_max, alpha=alpha)
+        if three_d:
+            c = axs[f_key].plot_surface(X, Y, Z[f_key], cmap='RdBu', vmin=0., vmax=z_max, alpha=alpha)
+        else:
+            c = axs[f_key].pcolormesh(X, Y, Z[f_key], cmap='RdBu', shading='auto', vmin=0., vmax=z_max, alpha=alpha)
+            axs[f_key].axes.set_aspect('equal')
         axs[f_key].set_title(f'Frame {f_key}')
         plt.gcf().colorbar(c, ax=axs[f_key])
         axs[f_key].plot([0, 1 / 2], [0, 0], 'r')
         axs[f_key].plot([0, 0], [0, 1 / 2], 'b')
-        axs[f_key].axes.set_aspect('equal')
     if plot_gaussian:
         _plot_gmm_frames(tprmp.model, frames, axs=axs, three_d=False)
