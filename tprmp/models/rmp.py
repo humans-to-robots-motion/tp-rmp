@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def compute_riemannian_metric(x, mvns, eps=1e-2):
+def compute_riemannian_metric(x, mvns, eps=1e-3):
     weights = compute_obsrv_prob(x, mvns)
     Ms = np.array([comp.cov_inv for comp in mvns])
     M = Ms.T @ weights if weights.sum() == 1. else np.eye(mvns[0].manifold.dim_T)
@@ -51,7 +51,7 @@ def compute_potentials(phi0, x, mvns, stiff_scale=1., tau=1., potential_method='
     for k in range(num_comp):
         comp = mvns[k]
         v = manifold.log_map(x, base=comp.mean)
-        quadratic = (v * ((stiff_scale**2) * comp.cov_inv @ v)).sum(0)
+        quadratic = v.T @ ((stiff_scale**2) * comp.cov_inv) @ v
         if potential_method == 'quadratic':
             P[k] = quadratic
         elif potential_method == 'tanh':

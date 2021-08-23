@@ -49,14 +49,14 @@ for d in data:
     demo.add_frame_from_pose(traj[:, 0], 'start')
     demo.add_frame_from_pose(traj[:, -1], 'end')
     demos.append(demo)
-plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, three_d=False, margin=margin, show=True)
+# plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, three_d=False, margin=margin, show=True)
 # train tprmp
 sample = demos[0]
 frames = sample.get_task_parameters()
 model = TPRMP(num_comp=NUM_COMP, name=args.task, sigma=sigma, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
 model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, var_scale=var_scale, verbose=verbose)
-model.model.plot_model(demos, tagging=False, three_d=False)
-plot_potential_field(model, frames, only_global=False, margin=margin, three_d=True, res=res, new_fig=True, show=True)
+# model.model.plot_model(demos, tagging=False, three_d=False)
+plot_potential_field(model, frames, only_global=True, margin=margin, three_d=True, res=res, new_fig=True, show=True)
 # execution
 x0, dx0 = demos[0].traj[:, 0], np.zeros(2)
 visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])

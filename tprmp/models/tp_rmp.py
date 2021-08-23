@@ -57,26 +57,13 @@ class TPRMP(object):
         """
         if compute_global_mvns or self._global_mvns is None:
             self.generate_global_gmm(frames)
-        f = self.compute_global_policy(x, dx, frames)  # - compute_coriolis_force(x, dx, self._global_mvns)
+        f = self.compute_global_policy(x, dx)  # - compute_coriolis_force(x, dx, self._global_mvns)
         M = compute_riemannian_metric(x, self._global_mvns)
         return M, f
 
-    def compute_global_policy(self, x, dx, frames):
-        if not set(self.model.frame_names).issubset(set(frames)):
-            raise IndexError(f'[TPRMP]: Frames must be subset of {self.model.frame_names}')
-        policy = np.zeros(self.model.manifold.dim_T)
-        weights, frame_dists = self.compute_frame_weights(x, frames)
-        mean_dist = np.zeros(self.model.manifold.dim_T)
-        for f_key in frame_dists:
-            mean_dist += weights[f_key] * frame_dists[f_key]
-        for f_key in self.model.frame_names:
-            # compute local policy
-            lx = frames[f_key].pullback(x)
-            ldx = frames[f_key].pullback_tangent(dx)
-            local_policy = compute_policy(self._phi0[f_key], self._d_scale * self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key),
-                                          stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
-            policy += weights[f_key] * frames[f_key].transform_tangent(local_policy)
-            policy += 1. / (self._sigma ** 2) * weights[f_key] * self.compute_potential_field_frame(lx, f_key) * (frame_dists[f_key] - mean_dist)
+    def compute_global_policy(self, x, dx):
+        policy = compute_policy(self._phi0, self._d_scale * self._d0, x, dx, self._global_mvns,
+                                stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
         return policy
 
     def compute_frame_weights(self, x, frames, normalized=True, eps=1e-307):
@@ -105,15 +92,10 @@ class TPRMP(object):
                     weights[f] = 1. if f == min_frame else 0.
         return weights, frame_dists
 
-    def compute_potential_field(self, x, frames):
-        frame_weights, _ = self.compute_frame_weights(x, frames)
-        Phi = 0.
-        for f_key in frames:
-            lx = frames[f_key].pullback(x)
-            mvns = self.model.get_local_gmm(f_key)
-            weights = compute_obsrv_prob(lx, mvns)
-            phi = compute_potentials(self.phi0[f_key], lx, mvns, stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
-            Phi += frame_weights[f_key] * (weights.T @ phi)
+    def compute_potential_field(self, x):
+        weights = compute_obsrv_prob(x, self._global_mvns)
+        phi = compute_potentials(self._phi0, x, self._global_mvns, stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
+        Phi = weights.T @ phi
         return Phi
 
     def compute_potential_field_frame(self, lx, frame):

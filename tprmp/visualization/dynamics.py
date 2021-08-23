@@ -79,9 +79,10 @@ def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True,
     y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
     X, Y = np.meshgrid(x, y)
     Z = np.zeros_like(X)
+    tprmp.generate_global_gmm(frames)
     for i in range(X.shape[0]):
         for j in range(X.shape[1]):
-            Z[i, j] = tprmp.compute_potential_field(np.array([X[i, j], Y[i, j]]), frames)
+            Z[i, j] = tprmp.compute_potential_field(np.array([X[i, j], Y[i, j]]))
     if three_d:
         c = ax.plot_surface(X, Y, Z, cmap='RdBu', vmin=0., vmax=Z.max(), alpha=alpha)
     else:

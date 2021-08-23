@@ -7,7 +7,7 @@ from tprmp.models.rmp import compute_obsrv_prob, compute_policy, compute_potenti
 logger = logging.getLogger(__name__)
 
 
-def optimize_dynamics(tp_hsmm, demos, **kwargs):
+def optimize_dynamics(tp_gmm, demos, **kwargs):
     alpha = kwargs.get('alpha', 1e-5)
     beta = kwargs.get('beta', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
@@ -16,12 +16,12 @@ def optimize_dynamics(tp_hsmm, demos, **kwargs):
     d_min = kwargs.get('d_min', 0.)
     energy = kwargs.get('energy', 0.)
     verbose = kwargs.get('verbose', False)
-    phi0_frames = optimize_potentials(tp_hsmm, demos, alpha=alpha, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, energy=energy, verbose=verbose)
-    d0_frames = optimize_dissipation(tp_hsmm, demos, phi0_frames, beta=beta, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_min=d_min, verbose=verbose)
-    return phi0_frames, d0_frames
+    phi0 = optimize_potentials(tp_gmm, demos, alpha=alpha, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, energy=energy, verbose=verbose)
+    d0 = optimize_dissipation(tp_gmm, demos, phi0, beta=beta, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_min=d_min, verbose=verbose)
+    return phi0, d0
 
 
-def optimize_potentials(tp_hsmm, demos, **kwargs):
+def optimize_potentials(tp_gmm, demos, **kwargs):
     alpha = kwargs.get('alpha', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
     tau = kwargs.get('tau', 1.)
@@ -29,38 +29,33 @@ def optimize_potentials(tp_hsmm, demos, **kwargs):
     energy = kwargs.get('energy', 0.)
     eps = kwargs.get('eps', 1e-4)
     verbose = kwargs.get('verbose', False)
-    frames = demos[0].frame_names
-    gap = energy / tp_hsmm.num_comp
-    phi0_frames = {}
-    for frame in frames:
-        phi0 = cp.Variable(tp_hsmm.num_comp)
-        loss = 0.
-        for demo in demos:
-            trajs = demo.traj_in_frames[frame]
-            x, dx = trajs['traj'], trajs['d_traj']
-            for t in range(x.shape[1]):
-                mvns = tp_hsmm.get_local_gmm(frame)
-                weights = compute_obsrv_prob(x[:, t], mvns)
-                f = compute_potential_term(weights, phi0, x[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
-                v = dx[:, t]
-                norm_v = np.linalg.norm(v)
-                if norm_v > eps:
-                    v = v / norm_v
-                loss += (cp.norm(v - f) / x.shape[1])
-        loss /= len(demos)
-        if alpha > 0.:
-            loss += alpha * cp.pnorm(phi0, p=2)**2
-        objective = cp.Minimize(loss)  # L2 regularization
-        problem = cp.Problem(objective, potential_constraints(phi0, gap))
-        problem.solve(verbose=verbose)
-        logger.info(f'Opimizing potential for frame {frame}...')
-        logger.info(f'Status: {problem.status}')
-        logger.info(f'Optimal phi0: {phi0.value}')
-        phi0_frames[frame] = phi0.value
-    return phi0_frames
+    gap = energy / tp_gmm.num_comp
+    phi0 = cp.Variable(tp_gmm.num_comp)
+    loss = 0.
+    for demo in demos:
+        x, dx = demo.traj, demo.d_traj
+        mvns = tp_gmm.generate_global_gmm(demo.get_task_parameters())
+        for t in range(x.shape[1]):
+            weights = compute_obsrv_prob(x[:, t], mvns)
+            f = compute_potential_term(weights, phi0, x[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
+            v = dx[:, t]
+            norm_v = np.linalg.norm(v)
+            if norm_v > eps:
+                v = v / norm_v
+            loss += (cp.norm(v - f) / x.shape[1])
+    loss /= len(demos)
+    if alpha > 0.:
+        loss += alpha * cp.pnorm(phi0, p=2)**2  # L2 regularization
+    objective = cp.Minimize(loss)
+    problem = cp.Problem(objective, potential_constraints(phi0, gap))
+    problem.solve(verbose=verbose)
+    logger.info('Optimizing potential...')
+    logger.info(f'Status: {problem.status}')
+    logger.info(f'Optimal phi0: {phi0.value}')
+    return phi0.value
 
 
-def optimize_dissipation(tp_hsmm, demos, phi0_frames, **kwargs):
+def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     beta = kwargs.get('beta', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
     tau = kwargs.get('tau', 1.)
@@ -68,35 +63,31 @@ def optimize_dissipation(tp_hsmm, demos, phi0_frames, **kwargs):
     d_min = kwargs.get('d_min', 0.)
     d_default = kwargs.get('d_default', 50.)
     verbose = kwargs.get('verbose', False)
-    frames = demos[0].frame_names
-    d0_frames = {}
-    for frame in frames:
-        d0 = cp.Variable(tp_hsmm.num_comp)
-        loss = 0.
-        for demo in demos:
-            trajs = demo.traj_in_frames[frame]
-            x, dx, ddx = trajs['traj'], trajs['d_traj'], trajs['dd_traj']
-            for t in range(x.shape[1]):
-                mvns = tp_hsmm.get_local_gmm(frame)
-                M = compute_riemannian_metric(x[:, t], mvns)
-                M_inv = np.linalg.inv(M)
-                f = compute_policy(phi0_frames[frame], d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
-                loss += cp.norm(ddx[:, t] - M_inv @ f) / x.shape[1]
-        loss /= len(demos)
-        if beta > 0.:
-            loss += beta * cp.pnorm(d0, p=2)**2  # L2 regularization
-        objective = cp.Minimize(loss)
-        problem = cp.Problem(objective, [d0 >= d_min])
-        try:
-            problem.solve(verbose=verbose)
-            logger.info(f'Opimizing dissipation for frame {frame}...')
-            logger.info(f'Status: {problem.status}')
-            logger.info(f'Optimal d0: {d0.value}')
-            d0_frames[frame] = d0.value
-        except cp.error.SolverError:
-            logger.warn(f'Opimizing dissipation for frame {frame} failed! Using d_default {d_default}')
-            d0_frames[frame] = 50. * np.ones((tp_hsmm.num_comp, tp_hsmm.manifold.dim_T))
-    return d0_frames
+    d0 = cp.Variable(tp_gmm.num_comp)
+    loss = 0.
+    for demo in demos:
+        x, dx, ddx = demo.traj, demo.d_traj, demo.dd_traj
+        mvns = tp_gmm.generate_global_gmm(demo.get_task_parameters())
+        for t in range(x.shape[1]):
+            M = compute_riemannian_metric(x[:, t], mvns)
+            M_inv = np.linalg.inv(M)
+            f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
+            loss += (cp.norm(ddx[:, t] - M_inv @ f) / x.shape[1])
+    loss /= len(demos)
+    if beta > 0.:
+        loss += beta * cp.pnorm(d0, p=2)**2  # L2 regularization
+    objective = cp.Minimize(loss)
+    problem = cp.Problem(objective, [d0 >= d_min])
+    try:
+        problem.solve(verbose=verbose)
+        logger.info('Optimizing dissipation...')
+        logger.info(f'Status: {problem.status}')
+        logger.info(f'Optimal d0: {d0.value}')
+        res = d0.value
+    except cp.error.SolverError:
+        logger.warn(f'Optimizing dissipation failed! Using d_default {d_default}')
+        res = d_default * np.ones(tp_gmm.num_comp)
+    return res
 
 
 def potential_constraints(phi0, gap=0.):
@@ -140,6 +131,3 @@ if __name__ == '__main__':
     model._frame_names = ['obj']
     # test training
     phi0, d0 = optimize_dynamics(model, [demo], alpha=1e-5, beta=1e-5)
-    # test retrieval
-    # x0, dx0 = np.array([0, 0.5]), np.zeros(2)
-    # visualize_rmp(phi0['obj'], d0['obj'], model.get_local_gmm('obj'), x0, dx0, T, dt, limit=10)

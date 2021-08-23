@@ -5,35 +5,32 @@ from tprmp.models.rmp import compute_obsrv_prob
 
 def compute_coriolis_force(x, dx, mvns):
     weights = compute_obsrv_prob(x, mvns)
-    return compute_dMdt_term(weights, x, dx, mvns) - compute_dTdx_term(weights, x, dx, mvns)
+    scale = compute_scale(weights, x, mvns)
+    return compute_dMdt(weights, scale, dx, mvns) @ dx - 0.5 * compute_dTdx(weights, scale, dx, mvns)
 
 
-def compute_dMdt_term(weights, x, dx, mvns):
-    terms = np.zeros_like(weights)
-    manifold = mvns[0].manifold
-    for k in range(weights.shape[0]):
-        terms[k] = manifold.log_map(x, base=mvns[k].mean).T @ mvns[k].cov_inv @ dx
-    weighted_term = weights.T @ terms
-    scale = weighted_term - terms
+def compute_dMdt(weights, scale, dx, mvns):
+    scale = scale @ dx
     Ms = np.array([comp.cov_inv for comp in mvns])
     dMdt = Ms.T @ (weights * scale)
-    return dMdt @ dx
+    return dMdt
 
 
-def compute_dTdx_term(weights, x, dx, mvns):
+def compute_dTdx(weights, scale, dx, mvns):
+    dTdx = np.zeros_like(dx)
+    for k in range(len(mvns)):
+        dTdx += weights[k] * (dx.T @ mvns[k].cov_inv @ dx) * scale[k]
+    return dTdx
+
+
+def compute_scale(weights, x, mvns):
     manifold = mvns[0].manifold
-    dim_T = manifold.dim_T
-    dTdx = np.zeros(dim_T)
-    terms = np.zeros((weights.shape[0], dim_T))
-    Ms = np.array([comp.cov_inv for comp in mvns])
-    for i in range(dim_T):
-        for k in range(weights.shape[0]):
-            terms[k, i] = manifold.log_map(x, base=mvns[k].mean).T @ mvns[k].cov_inv[i, :]
-        weighted_term = weights.T @ terms[:, i]
-        scale = weighted_term - terms[:, i]
-        dMdxi = Ms.T @ (weights * scale)
-        dTdx[i] = dx.T @ dMdxi @ dx
-    return 1. / 2. * dTdx
+    pulls = np.zeros((len(mvns), manifold.dim_T))
+    for k in range(weights.shape[0]):
+        pulls[k] = manifold.log_map(x, base=mvns[k].mean).T @ mvns[k].cov_inv
+    mean_pull = weights.T @ pulls
+    scale = mean_pull - pulls
+    return scale
 
 
 if __name__ == '__main__':
