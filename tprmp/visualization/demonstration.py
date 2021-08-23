@@ -31,6 +31,7 @@ def _plot_traj_global(demos, **kwargs):
     title = kwargs.get('title', 'Global frame')
     new_ax = kwargs.get('new_ax', False)
     three_d = kwargs.get('three_d', True)
+    margin = kwargs.get('margin', 0.1)
     if new_ax:
         if three_d:
             ax = plt.subplot(111, projection="3d")
@@ -44,7 +45,7 @@ def _plot_traj_global(demos, **kwargs):
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     # equal xyz scale
     sample_traj = demos[0].traj
-    _equalize_axes(ax, sample_traj, three_d=three_d)
+    _equalize_axes(ax, sample_traj, three_d=three_d, margin=margin)
     for d in range(len(demos)):
         _plot_traj(demos[d].traj, label=demos[d].tag, color=cycle[tag_map[demos[d].tag]], **kwargs)
         if plot_frames:
@@ -62,6 +63,7 @@ def _plot_traj_frames(demos, axs=None, **kwargs):
     legend = kwargs.get('legend', True)
     plot_frames = kwargs.get('plot_frames', True)
     three_d = kwargs.get('three_d', True)
+    margin = kwargs.get('margin', 0.1)
     frames = demos[0].frame_names
     if axs is None:
         plt.clf()
@@ -75,7 +77,7 @@ def _plot_traj_frames(demos, axs=None, **kwargs):
     for f_key in frames:
         plt.sca(axs[f_key])
         sample_traj = demos[0].traj_in_frames[f_key]['traj']
-        _equalize_axes(axs[f_key], sample_traj, three_d=three_d)
+        _equalize_axes(axs[f_key], sample_traj, three_d=three_d, margin=margin)
         demo_tags = list(set([demo.tag for demo in demos]))
         tag_map = {v: i for i, v in enumerate(demo_tags)}
         cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]

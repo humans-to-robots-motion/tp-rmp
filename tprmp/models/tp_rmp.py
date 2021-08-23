@@ -7,7 +7,7 @@ import time
 
 from tprmp.models.tp_hsmm import TPHSMM
 from tprmp.models.rmp import compute_policy, compute_riemannian_metric, compute_potentials, compute_obsrv_prob
-from tprmp.models.coriolis import compute_coriolis_force
+from tprmp.models.coriolis import compute_coriolis_force  # noqa
 from tprmp.optimizer.dynamics import optimize_dynamics
 from tprmp.utils.loading import load
 
@@ -57,30 +57,42 @@ class TPRMP(object):
         """
         if compute_global_mvns or self._global_mvns is None:
             self.generate_global_gmm(frames)
-        f = self.compute_global_policy(x, dx, frames) - compute_coriolis_force(x, dx, self._global_mvns)
+        f = self.compute_global_policy(x, dx, frames)  # - compute_coriolis_force(x, dx, self._global_mvns)
         M = compute_riemannian_metric(x, self._global_mvns)
         return M, f
 
     def compute_global_policy(self, x, dx, frames):
         if not set(self.model.frame_names).issubset(set(frames)):
             raise IndexError(f'[TPRMP]: Frames must be subset of {self.model.frame_names}')
-        policies = np.zeros((len(frames), self.model.manifold.dim_T))
-        weights = self.compute_frame_weights(x, frames)
-        for i, f_key in enumerate(self.model.frame_names):
+        policy = np.zeros(self.model.manifold.dim_T)
+        weights, frame_dists = self.compute_frame_weights(x, frames)
+        mean_dist = np.zeros(self.model.manifold.dim_T)
+        for f_key in frame_dists:
+            mean_dist += weights[f_key] * frame_dists[f_key]
+        for f_key in self.model.frame_names:
             # compute local policy
             lx = frames[f_key].pullback(x)
             ldx = frames[f_key].pullback_tangent(dx)
             local_policy = compute_policy(self._phi0[f_key], self._d_scale * self._d0[f_key], lx, ldx, self.model.get_local_gmm(f_key),
                                           stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
-            policies[i] = weights[f_key] * frames[f_key].transform_tangent(local_policy)
-        return policies.sum(0)
+            policy += weights[f_key] * frames[f_key].transform_tangent(local_policy)
+            policy += 1. / (self._sigma ** 2) * weights[f_key] * self.compute_potential_field_frame(lx, f_key) * (frame_dists[f_key] - mean_dist)
+        return policy
 
-    def compute_frame_weights(self, x, frames, normalized=True, eps=1e-30):
+    def compute_frame_weights(self, x, frames, normalized=True, eps=1e-307):
         origin = self.model.manifold.get_origin()
         frame_origins = {k: v.transform(origin) for k, v in frames.items()}
         weights = {}
+        frame_dists = {}
+        min_dist = np.inf
+        min_frame = None
         for f, o in frame_origins.items():
             v = self.model.manifold.log_map(x, base=o)
+            frame_dists[f] = v
+            dist = np.linalg.norm(v)
+            if dist < min_dist:
+                min_dist = dist
+                min_frame = f
             w = np.exp(-v.T @ v / (2 * self._sigma ** 2))
             weights[f] = w
         s = sum(weights.values())
@@ -88,10 +100,13 @@ class TPRMP(object):
             if s > eps:
                 for f in weights:
                     weights[f] /= s
-        return weights
+            else:  # collapse to onehot prob of nearest frame
+                for f in weights:
+                    weights[f] = 1. if f == min_frame else 0.
+        return weights, frame_dists
 
     def compute_potential_field(self, x, frames):
-        frame_weights = self.compute_frame_weights(x, frames)
+        frame_weights, _ = self.compute_frame_weights(x, frames)
         Phi = 0.
         for f_key in frames:
             lx = frames[f_key].pullback(x)
@@ -116,7 +131,6 @@ class TPRMP(object):
         ----------
         :param demos: list of Demonstration objects
         """
-        optimize_method = kwargs.get('optimize_method', 'flow')
         alpha = kwargs.get('alpha', 1e-5)
         beta = kwargs.get('beta', 1e-5)
         min_d = kwargs.get('min_d', 20.)
@@ -131,7 +145,7 @@ class TPRMP(object):
         if var_scale > 1.:
             self.model.scale_covariance(var_scale)
         # train dynamics
-        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha=alpha, beta=beta, optimize_method=optimize_method,
+        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha=alpha, beta=beta,
                                                  stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method, min_d=min_d, energy=energy, verbose=verbose)
         # train local Riemannian metrics TODO: RiemannianNetwork is still under consideration
         # self._R_net = optimize_riemannian_metric(self, demos, **kwargs)
