@@ -105,6 +105,11 @@ class TPRMP(object):
         Phi = weights.T @ phi
         return Phi
 
+    def compute_dissipation_field(self, x):
+        weights = compute_obsrv_prob(x, self._global_mvns)
+        d = weights.T @ self.d0
+        return d
+
     def train(self, demos, **kwargs):
         """
         Trains the TP-RMP with a given set of demonstrations.

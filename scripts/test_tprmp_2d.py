@@ -10,15 +10,15 @@ ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
 from tprmp.utils.loading import load  # noqa
 from tprmp.visualization.demonstration import plot_demo  # noqa
-from tprmp.visualization.dynamics import plot_potential_field, visualize_rmp # noqa
+from tprmp.visualization.dynamics import plot_dissipation_field, plot_potential_field, visualize_rmp # noqa
 from tprmp.models.tp_rmp import TPRMP  # noqa
 from tprmp.demonstrations.base import Demonstration  # noqa
 from tprmp.demonstrations.manifold import Manifold  # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py test.p')
-parser.add_argument('task', help='The task folder', type=str, default='pick')
-parser.add_argument('data', help='The data file', type=str, default='data.p')
+parser.add_argument('--task', help='The task folder', type=str, default='test')
+parser.add_argument('--data', help='The data file', type=str, default='test2.p')
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
@@ -55,7 +55,8 @@ frames = sample.get_task_parameters()
 model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
 model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, var_scale=var_scale, verbose=verbose)
 # model.model.plot_model(demos, tagging=False, three_d=False)
-plot_potential_field(model, frames, only_global=True, margin=margin, three_d=True, res=res, new_fig=True, show=True)
+plot_potential_field(model, frames, only_global=True, margin=margin, three_d=True, res=res, new_fig=True, show=False)
+plot_dissipation_field(model, frames, only_global=True, margin=margin, res=res, new_fig=True, show=True)
 # execution
 x0, dx0 = np.array([0.8, 1.8]), np.zeros(2)
 visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])

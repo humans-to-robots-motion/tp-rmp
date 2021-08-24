@@ -46,6 +46,46 @@ def visualize_rmp(tprmp, frames, x0, dx0, T, dt, sample=None, x_limits=[0., 5.],
         fig.canvas.flush_events()
 
 
+def plot_dissipation_field(tprmp, frames, **kwargs):
+    only_global = kwargs.get('only_global', True)
+    plot_gaussian = kwargs.get('plot_gaussian', True)
+    margin = kwargs.get('margin', 0.5)
+    res = kwargs.get('res', 0.1)
+    new_fig = kwargs.get('new_fig', False)
+    show = kwargs.get('show', False)
+    origin = tprmp.model.manifold.get_origin()
+    frame_origins = np.array([v.transform(origin) for v in frames.values()])
+    ranges = np.array([frame_origins[:, 0].max() - frame_origins[:, 0].min(), frame_origins[:, 1].max() - frame_origins[:, 1].min()]).max() * 0.5 + margin
+    mid_x = (frame_origins[:, 0].max() + frame_origins[:, 0].min()) * 0.5
+    mid_y = (frame_origins[:, 1].max() + frame_origins[:, 1].min()) * 0.5
+    if new_fig:
+        plt.figure()
+    _plot_dissipation_field_global(tprmp, frames, [mid_x, mid_y], ranges, plot_gaussian=plot_gaussian, res=res)
+    if not only_global:
+        pass  # TODO: implement plotting in frame if needed
+    if show:
+        plt.show()
+
+
+def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, res=0.1, alpha=0.7):
+    ax = plt.subplot(111)
+    x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
+    y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
+    X, Y = np.meshgrid(x, y)
+    Z = np.zeros_like(X)
+    tprmp.generate_global_gmm(frames)
+    for i in range(X.shape[0]):
+        for j in range(X.shape[1]):
+            Z[i, j] = tprmp.compute_dissipation_field(np.array([X[i, j], Y[i, j]]))
+    c = ax.pcolormesh(X, Y, Z, cmap='YlOrBr', shading='auto', vmin=0., vmax=Z.max(), alpha=alpha)
+    ax.axes.set_aspect('equal')
+    ax.set_title('Global dissipation field')
+    plt.gcf().colorbar(c, ax=ax)
+    plot_frame_2d(frames.values())
+    if plot_gaussian:
+        _plot_gmm_global(tprmp.model, frames, three_d=False, new_ax=False)
+
+
 def plot_potential_field(tprmp, frames, **kwargs):
     only_global = kwargs.get('only_global', True)
     plot_gaussian = kwargs.get('plot_gaussian', True)
