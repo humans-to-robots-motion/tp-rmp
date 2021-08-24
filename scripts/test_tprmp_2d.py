@@ -28,16 +28,15 @@ oversteps = 200
 dt = 0.01
 NUM_COMP = 30
 alpha, beta = 0., 0.
-stiff_scale = 1.5
+stiff_scale = 2.
 tau = 0.01
 potential_method = 'quadratic'
 d_min = 0.
-d_scale = 2.
+d_scale = 1.
 energy = 200.
-sigma = 2.
-var_scale = 1.5
+var_scale = 2.
 res = 0.05
-margin = 0.1
+margin = 0.2
 verbose = False
 # load data
 data = load(data_file)
@@ -53,11 +52,11 @@ for d in data:
 # train tprmp
 sample = demos[0]
 frames = sample.get_task_parameters()
-model = TPRMP(num_comp=NUM_COMP, name=args.task, sigma=sigma, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
+model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
 model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, var_scale=var_scale, verbose=verbose)
 # model.model.plot_model(demos, tagging=False, three_d=False)
 plot_potential_field(model, frames, only_global=True, margin=margin, three_d=True, res=res, new_fig=True, show=True)
 # execution
-x0, dx0 = demos[0].traj[:, 0], np.zeros(2)
+x0, dx0 = np.array([0.8, 1.8]), np.zeros(2)
 visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
 input()

@@ -77,7 +77,7 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     if beta > 0.:
         loss += beta * cp.pnorm(d0, p=2)**2  # L2 regularization
     objective = cp.Minimize(loss)
-    problem = cp.Problem(objective, [d0 >= d_min])
+    problem = cp.Problem(objective, dissipation_constraints(d0, d_min))
     try:
         problem.solve(verbose=verbose)
         logger.info('Optimizing dissipation...')
@@ -95,6 +95,14 @@ def potential_constraints(phi0, gap=0.):
     for k in range(phi0.size - 1):
         constraints.append(phi0[k] >= (phi0[k + 1] + gap))
     constraints.append(phi0 >= 0)
+    return constraints
+
+
+def dissipation_constraints(d0, d_min=0.):
+    constraints = []
+    for k in range(d0.size - 1):
+        constraints.append(d0[k] <= d0[k + 1])
+    constraints.append(d0 >= d_min)
     return constraints
 
 
