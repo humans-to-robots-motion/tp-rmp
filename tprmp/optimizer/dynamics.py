@@ -2,6 +2,7 @@ import cvxpy as cp
 import numpy as np
 import logging
 
+from tprmp.models.coriolis import compute_coriolis_force
 from tprmp.models.rmp import compute_obsrv_prob, compute_policy, compute_potential_term, compute_riemannian_metric
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     potential_method = kwargs.get('potential_method', 'quadratic')
     d_min = kwargs.get('d_min', 0.)
     d_default = kwargs.get('d_default', 50.)
+    max_iters = kwargs.get('max_iters', 500)
     verbose = kwargs.get('verbose', False)
     d0 = cp.Variable(tp_gmm.num_comp)
     loss = 0.
@@ -71,7 +73,7 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
         for t in range(x.shape[1]):
             M = compute_riemannian_metric(x[:, t], mvns)
             M_inv = np.linalg.inv(M)
-            f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
+            f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method) - compute_coriolis_force(x[:, t], dx[:, t], mvns)
             loss += (cp.norm(ddx[:, t] - M_inv @ f) / x.shape[1])
     loss /= len(demos)
     if beta > 0.:
@@ -79,7 +81,7 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     objective = cp.Minimize(loss)
     problem = cp.Problem(objective, dissipation_constraints(d0, d_min))
     try:
-        problem.solve(verbose=verbose)
+        problem.solve(max_iters=max_iters, verbose=verbose)
         logger.info('Optimizing dissipation...')
         logger.info(f'Status: {problem.status}')
         logger.info(f'Optimal d0: {d0.value}')

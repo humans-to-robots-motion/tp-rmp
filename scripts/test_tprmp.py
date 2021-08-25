@@ -33,14 +33,14 @@ T = 100
 NUM_COMP = 30
 alpha, beta = 0., 0.
 stiff_scale = 1.
-tau = 0.01
+tau = 0.5
 potential_method = 'tanh'
 d_min = 0.
-d_scale = 2.
-energy = 10.
-var_scale = 1.
+d_scale = 1.
+energy = 1.
+var_scale = 10.
 res = 0.01
-margin = -0.05
+margin = 0.05
 verbose = False
 r = 0.01
 # load data
@@ -55,14 +55,14 @@ else:
     model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, var_scale=var_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
     model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, verbose=verbose)
     model.save(name=args.data)
-# model.model.plot_model(demos)
+model.model.plot_model(demos, var_scale=var_scale)
 # test tprmp
 env = Environment(task=PalletizingBoxes(), disp=True, sampling_hz=sampling_hz)
 ee_pose = np.array(np.array(demos[0].traj[:, 0]))
 A, b = Demonstration.construct_linear_map(manifold, ee_pose)
 ee_frame = Frame(A, b, manifold=manifold)
 box_id = env.task.goals[0][0][0]
-position = np.array([0.5, -0.25, env.task.box_size[0] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
+position = np.array([0.5, -0.25, env.task.box_size[0] / 2])  # + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
 rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
 p.resetBasePositionAndOrientation(box_id, position, rotation)
 target = p.getBasePositionAndOrientation(box_id)

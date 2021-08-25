@@ -23,6 +23,7 @@ def plot_gmm(model, frames, only_global=True, legend=True, new_fig=False, show=F
 
 
 def _plot_gmm_global(model, frames, **kwargs):
+    var_scale = kwargs.get('var_scale', 1.)  # to plot descale variances
     plot_quat = kwargs.get('plot_quat', False)
     tag = kwargs.get('tag', None)
     three_d = kwargs.get('three_d', True)
@@ -35,12 +36,13 @@ def _plot_gmm_global(model, frames, **kwargs):
     global_mvns = model.generate_global_gmm(frames, tag=tag)
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     for k in range(len(global_mvns)):  # TODO: change to multiple cluster with tags
-        _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)], three_d=three_d)
+        _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)], three_d=three_d, var_scale=var_scale)
         if three_d and plot_quat:
             plot_frame(global_mvns[k].mean[-4:], global_mvns[k].mean[:3], length_scale=0.02, alpha=0.8)
 
 
 def _plot_gmm_frames(model, frames, axs=None, **kwargs):
+    var_scale = kwargs.get('var_scale', 1.)  # to plot descale variances
     plot_quat = kwargs.get('plot_quat', False)
     tag = kwargs.get('tag', None)
     three_d = kwargs.get('three_d', True)
@@ -59,15 +61,15 @@ def _plot_gmm_frames(model, frames, axs=None, **kwargs):
         comps = range(model.num_comp) if ((model.tag_to_comp_map is None) or
                                           (tag not in model.tag_to_comp_map)) else model.tag_to_comp_map[tag]
         for k in comps:  # TODO: change to multiple cluster with tags
-            _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)], three_d=three_d)
+            _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)], three_d=three_d, var_scale=var_scale)
             if three_d and plot_quat:
                 plot_frame(model.mvns[k][frame].mean[-4:], model.mvns[k][frame].mean[:3], length_scale=0.02, alpha=0.8)
 
 
-def _plot_gaussian(mvn, color='b', three_d=True):
+def _plot_gaussian(mvn, color='b', three_d=True, var_scale=1.):
     if three_d:
         mu = mvn.mean[:3]
-        cov = mvn.cov[:3, :3]
+        cov = mvn.cov[:3, :3] / (var_scale**2)
         center = mu[0:3]
         _, s, rotation = np.linalg.svd(cov)
         radii = np.sqrt(s)
@@ -83,7 +85,7 @@ def _plot_gaussian(mvn, color='b', three_d=True):
         plt.plot([mu[0]], [mu[1]], [mu[2]], marker='o', color=color)
     else:
         mu = mvn.mean[:2]
-        cov = mvn.cov[:2, :2]
+        cov = mvn.cov[:2, :2] / (var_scale**2)
         w, v = np.linalg.eig(cov)
         x, y = v[:, 0]
         theta = float(np.degrees(np.arctan2(y, x)))

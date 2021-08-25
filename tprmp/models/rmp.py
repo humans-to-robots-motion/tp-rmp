@@ -1,10 +1,10 @@
 import numpy as np
 
 
-def compute_riemannian_metric(x, mvns, eps=1e-3):
+def compute_riemannian_metric(x, mvns, eps=1e-5):
     weights = compute_obsrv_prob(x, mvns)
     Ms = np.array([comp.cov_inv for comp in mvns])
-    M = Ms.T @ weights if weights.sum() == 1. else np.eye(mvns[0].manifold.dim_T)
+    M = Ms.T @ weights if weights.sum() > 0. else np.eye(mvns[0].manifold.dim_T)
     return M + eps * np.eye(mvns[0].manifold.dim_T)
 
 
@@ -14,7 +14,6 @@ def compute_policy(phi0, d0, x, dx, mvns, stiff_scale=1., tau=1., potential_meth
 
 
 def compute_potential_term(weights, phi0, x, mvns, stiff_scale=1., tau=1., potential_method='quadratic'):
-    '''stiff_scale only works with quadratic potential'''
     phi = compute_potentials(phi0, x, mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
     num_comp = len(mvns)
     manifold = mvns[0].manifold
@@ -29,8 +28,8 @@ def compute_potential_term(weights, phi0, x, mvns, stiff_scale=1., tau=1., poten
             Ps += -weights[k] * (stiff_scale**2) * pulls[k]
         elif potential_method == 'tanh':
             v = manifold.log_map(x, base=mvns[k].mean)
-            norm = np.sqrt(v.T @ pulls[k])
-            Ps += -weights[k] * np.tanh(tau * norm) * pulls[k] / norm
+            norm = np.sqrt((stiff_scale**2) * v.T @ pulls[k])
+            Ps += -weights[k] * np.tanh(tau * norm) * (stiff_scale**2) * pulls[k] / norm
         else:
             raise ValueError(f'Potential method {potential_method} is unrecognized!')
     return Ps

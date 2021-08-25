@@ -38,11 +38,12 @@ if __name__ == '__main__':
     from tprmp.demonstrations.manifold import Manifold
     manifold = Manifold.get_euclidean_manifold(2)
     mvns = [ManifoldGaussian(manifold, np.ones(2), np.eye(2)),
-            ManifoldGaussian(manifold, 3 * np.ones(2), 2 * np.eye(2)),
-            ManifoldGaussian(manifold, 7 * np.ones(2), 3 * np.eye(2))]
+            ManifoldGaussian(manifold, 3 * np.ones(2), np.eye(2)),
+            ManifoldGaussian(manifold, 5 * np.ones(2), np.eye(2))]
+    # test coriolis forces, should be zeros for all cases
     x, dx = np.ones(2), np.zeros(2)
     print(compute_coriolis_force(x, dx, mvns))
     x, dx = np.ones(2), np.ones(2)
     print(compute_coriolis_force(x, dx, mvns))
-    x, dx = 2 * np.ones(2), np.ones(2)
+    x, dx = 100000 * np.ones(2), 100000 * np.ones(2)
     print(compute_coriolis_force(x, dx, mvns))

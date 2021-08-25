@@ -96,6 +96,7 @@ def plot_dissipation_field(tprmp, frames, **kwargs):
     '''Only works with 2D data'''
     only_global = kwargs.get('only_global', True)
     plot_gaussian = kwargs.get('plot_gaussian', True)
+    var_scale = kwargs.get('var_scale', 1.)
     margin = kwargs.get('margin', 0.5)
     res = kwargs.get('res', 0.1)
     new_fig = kwargs.get('new_fig', False)
@@ -103,14 +104,14 @@ def plot_dissipation_field(tprmp, frames, **kwargs):
     mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin)
     if new_fig:
         plt.figure()
-    _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, res=res)
+    _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, res=res)
     if not only_global:
         pass  # TODO: implement plotting in frame if needed
     if show:
         plt.show()
 
 
-def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, res=0.1, alpha=0.7):
+def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., res=0.1, alpha=0.7):
     ax = plt.subplot(111)
     x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
     y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
@@ -126,13 +127,14 @@ def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=Tru
     plt.gcf().colorbar(c, ax=ax)
     plot_frame_2d(frames.values())
     if plot_gaussian:
-        _plot_gmm_global(tprmp.model, frames, three_d=False, new_ax=False)
+        _plot_gmm_global(tprmp.model, frames, var_scale=var_scale, three_d=False, new_ax=False)
 
 
 def plot_potential_field(tprmp, frames, **kwargs):
     '''Only works with 2D data'''
     only_global = kwargs.get('only_global', True)
     plot_gaussian = kwargs.get('plot_gaussian', True)
+    var_scale = kwargs.get('var_scale', 1.)
     three_d = kwargs.get('three_d', False)
     margin = kwargs.get('margin', 0.5)
     res = kwargs.get('res', 0.1)
@@ -141,16 +143,16 @@ def plot_potential_field(tprmp, frames, **kwargs):
     mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin)
     if new_fig:
         plt.figure()
-    _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, three_d=three_d, res=res)
+    _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, three_d=three_d, res=res)
     if not only_global:
         if three_d:
             plt.figure()
-        _plot_potential_field_frames(tprmp, frames, ranges, plot_gaussian=plot_gaussian, three_d=three_d, res=res)
+        _plot_potential_field_frames(tprmp, frames, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, three_d=three_d, res=res)
     if show:
         plt.show()
 
 
-def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, three_d=False, res=0.1, alpha=0.7):
+def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, alpha=0.7):
     if three_d:
         ax = plt.subplot(111, projection='3d')
     else:
@@ -172,10 +174,10 @@ def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True,
     plt.gcf().colorbar(c, ax=ax)
     plot_frame_2d(frames.values())
     if plot_gaussian:
-        _plot_gmm_global(tprmp.model, frames, three_d=False, new_ax=False)
+        _plot_gmm_global(tprmp.model, frames, var_scale=var_scale, three_d=False, new_ax=False)
 
 
-def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=True, three_d=False, res=0.1, alpha=0.7):
+def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, alpha=0.7):
     if axs is None:
         axs = {}
         if three_d:
@@ -207,7 +209,7 @@ def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=
         axs[f_key].plot([0, 1 / 2], [0, 0], 'r')
         axs[f_key].plot([0, 0], [0, 1 / 2], 'b')
     if plot_gaussian:
-        _plot_gmm_frames(tprmp.model, frames, axs=axs, three_d=False)
+        _plot_gmm_frames(tprmp.model, frames, axs=axs, var_scale=var_scale, three_d=False)
 
 
 def _get_data_ranges(frames, origin, margin=0.1, d=2):

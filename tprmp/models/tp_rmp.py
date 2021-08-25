@@ -58,7 +58,7 @@ class TPRMP(object):
         """
         if compute_global_mvns or self._global_mvns is None:
             self.generate_global_gmm(frames)
-        f = self.compute_global_policy(x, dx)  # - compute_coriolis_force(x, dx, self._global_mvns)
+        f = self.compute_global_policy(x, dx) - compute_coriolis_force(x, dx, self._global_mvns)
         M = compute_riemannian_metric(x, self._global_mvns)
         return M, f
 
@@ -170,6 +170,10 @@ class TPRMP(object):
     @property
     def d0(self):
         return self._d0
+
+    @property
+    def var_scale(self):
+        return self._var_scale
 
     @property
     def task_parameters(self):

@@ -25,17 +25,17 @@ args = parser.parse_args()
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
 data_file = join(DATA_DIR, args.data)
 # parameters
-oversteps = 200
+oversteps = 1000
 dt = 0.01
 NUM_COMP = 30
 alpha, beta = 0., 0.
-stiff_scale = 2.
-tau = 0.01
-potential_method = 'quadratic'
+stiff_scale = 1.
+tau = 0.5
+potential_method = 'tanh'
 d_min = 0.
 d_scale = 1.
-energy = 200.
-var_scale = 2.
+energy = 38.
+var_scale = 20.
 res = 0.05
 margin = 0.2
 verbose = False
@@ -58,11 +58,11 @@ if args.loading:
 else:
     model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, var_scale=var_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
     model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, verbose=verbose)
-    # model.save(name=args.data)
-# model.model.plot_model(demos, tagging=False, three_d=False)
-plot_potential_field(model, frames, only_global=True, margin=margin, three_d=True, res=res, new_fig=True, show=False)
-plot_dissipation_field(model, frames, only_global=True, margin=margin, res=res, new_fig=True, show=True)
+    model.save(name=args.data)
+# model.model.plot_model(demos, tagging=False, var_scale=var_scale, three_d=False)
+plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, three_d=True, res=res, new_fig=True, show=False)
+plot_dissipation_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, res=res, new_fig=True, show=True)
 # execution
-x0, dx0 = np.array([0.8, 1.8]), np.zeros(2)
+x0, dx0 = demos[0].traj[:, 0], np.zeros(2)
 visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
 input()
