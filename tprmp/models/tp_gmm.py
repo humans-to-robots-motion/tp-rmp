@@ -1,3 +1,5 @@
+from tprmp.demonstrations.probability import ManifoldGaussian
+from tprmp.demonstrations.manifold import Manifold
 import numpy as np
 import time
 import pickle
@@ -37,7 +39,7 @@ class TPGMM(object):
         # TODO: implement training routine for TPGMM if needed
         pass
 
-    def set_params(self, model_params):
+    def set_params(self, model_params, raw=False):
         """
         Parameters
         ----------
@@ -47,8 +49,12 @@ class TPGMM(object):
             model_params["pi"] = np.array([w1, w2, ... wK]).
             model_params["dim_M"] int, the dimension of the data.
         """
+        mvns = model_params['mvns']
+        if raw:
+            manifold = Manifold.get_manifold_from_name(model_params['manifold_name'])
+            mvns = [{f: ManifoldGaussian(manifold, c[0], c[1]) for f, c in comp.items()} for comp in mvns]
         self._pi = model_params['pi']
-        self._mvns = model_params['mvns']
+        self._mvns = mvns
         self._num_comp = len(self._mvns)
         self._component_names = []
         for comp in range(self.num_comp):
@@ -106,20 +112,26 @@ class TPGMM(object):
     def __hash__(self):
         return hash(tuple(sorted(self.__dict__.items())))
 
-    def parameters(self):
+    def parameters(self, raw=False):
+        if raw:
+            mvns = [{f: (c.mean, c.cov) for f, c in comp.items()} for comp in self.mvns]
+        else:
+            mvns = self.mvns
         params = {
-            'mvns': self.mvns,
+            'mvns': mvns,
             'pi': self.pi,
             'dim_M': self.dim_M,
+            'manifold_name': self.manifold.name,
             'tag_to_comp_map': self.tag_to_comp_map
         }
         return params
 
-    def save(self):
-        file = join(DATA_PATH, self.name, 'models', 'tpgmm_' + str(time.time()) + '.p')
-        os.makedirs(file, exist_ok=True)
+    def save(self, name=None):
+        dir = join(DATA_PATH, self.name, 'models')
+        file = join(dir, 'tpgmm_' + (name if name is not None else (str(time.time()) + '.p')))
+        os.makedirs(dir, exist_ok=True)
         with open(file, 'wb') as f:
-            pickle.dump(self.parameters(), f)
+            pickle.dump(self.parameters(raw=True), f)
 
     @staticmethod
     def load(task_name, model_name):
@@ -128,7 +140,7 @@ class TPGMM(object):
             raise ValueError(f'[TPGMM]: File {file} does not exist!')
         model_params = load(file)
         model = TPGMM(name=task_name)
-        model.set_params(model_params)
+        model.set_params(model_params, raw=True)
         return model
 
     @property

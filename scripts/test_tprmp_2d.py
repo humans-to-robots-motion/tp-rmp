@@ -17,6 +17,7 @@ from tprmp.demonstrations.manifold import Manifold  # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py test.p')
+parser.add_argument('--loading', help='Load or not', type=bool, default=True)
 parser.add_argument('--task', help='The task folder', type=str, default='test')
 parser.add_argument('--data', help='The data file', type=str, default='test2.p')
 args = parser.parse_args()
@@ -52,8 +53,12 @@ for d in data:
 # train tprmp
 sample = demos[0]
 frames = sample.get_task_parameters()
-model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
-model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, var_scale=var_scale, verbose=verbose)
+if args.loading:
+    model = TPRMP.load(args.task, model_name=args.data)
+else:
+    model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, var_scale=var_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
+    model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, verbose=verbose)
+    # model.save(name=args.data)
 # model.model.plot_model(demos, tagging=False, three_d=False)
 plot_potential_field(model, frames, only_global=True, margin=margin, three_d=True, res=res, new_fig=True, show=False)
 plot_dissipation_field(model, frames, only_global=True, margin=margin, res=res, new_fig=True, show=True)

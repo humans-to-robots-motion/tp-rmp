@@ -1,7 +1,12 @@
+from tprmp.demonstrations.manifold import Manifold
 import numpy as np
 import matplotlib.pyplot as plt
-from tprmp.visualization.demonstration import plot_frame_2d
+from tprmp.visualization.demonstration import plot_frame_2d, plot_frame
 from tprmp.visualization.models import _plot_gmm_global, _plot_gmm_frames
+import matplotlib
+from matplotlib import cm
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 
 def visualize_rmp(tprmp, frames, x0, dx0, T, dt, sample=None, x_limits=[0., 5.], vel_limits=[-10., 10.]):  # TODO: extend to 3D later
@@ -46,21 +51,59 @@ def visualize_rmp(tprmp, frames, x0, dx0, T, dt, sample=None, x_limits=[0., 5.],
         fig.canvas.flush_events()
 
 
-def plot_dissipation_field(tprmp, frames, **kwargs):
+def plot_heatmap_3d(tprmp, frames, **kwargs):
+    '''3D heatmap using scatter'''
     only_global = kwargs.get('only_global', True)
     plot_gaussian = kwargs.get('plot_gaussian', True)
     margin = kwargs.get('margin', 0.5)
     res = kwargs.get('res', 0.1)
     new_fig = kwargs.get('new_fig', False)
     show = kwargs.get('show', False)
-    origin = tprmp.model.manifold.get_origin()
-    frame_origins = np.array([v.transform(origin) for v in frames.values()])
-    ranges = np.array([frame_origins[:, 0].max() - frame_origins[:, 0].min(), frame_origins[:, 1].max() - frame_origins[:, 1].min()]).max() * 0.5 + margin
-    mid_x = (frame_origins[:, 0].max() + frame_origins[:, 0].min()) * 0.5
-    mid_y = (frame_origins[:, 1].max() + frame_origins[:, 1].min()) * 0.5
+    mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin, d=3)
     if new_fig:
         plt.figure()
-    _plot_dissipation_field_global(tprmp, frames, [mid_x, mid_y], ranges, plot_gaussian=plot_gaussian, res=res)
+    _plot_heatmap_3d_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, res=res)
+    if not only_global:
+        pass  # TODO: implement plotting in frame if needed
+    if show:
+        plt.show()
+
+
+def _plot_heatmap_3d_global(tprmp, frames, mid, ranges, plot_gaussian=True, res=0.1, alpha=0.5):
+    ax = plt.subplot(111, projection="3d")
+    x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
+    y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
+    z = np.arange(mid[2] - ranges, mid[2] + ranges, res)
+    manifold = Manifold.get_euclidean_manifold(3)
+    X, Y, Z = np.meshgrid(x, y, z)
+    V = np.zeros_like(Z)
+    tprmp.generate_global_gmm(frames)
+    for i in range(X.shape[0]):
+        for j in range(X.shape[1]):
+            for k in range(X.shape[2]):
+                V[i, j, k] = tprmp.compute_potential_field(np.array([X[i, j, k], Y[i, j, k], Z[i, j, k]]), manifold=manifold)
+    color_map = cm.ScalarMappable(cmap='RdBu')
+    color_map.set_array(np.ravel(V))
+    ax.scatter(np.ravel(X), np.ravel(Y), np.ravel(Z), s=10, cmap='RdBu', alpha=alpha)
+    ax.set_title('Global potential field')
+    plt.colorbar(color_map)
+    plot_frame(frames.values())
+    if plot_gaussian:
+        _plot_gmm_global(tprmp.model, frames, three_d=True, new_ax=False)
+
+
+def plot_dissipation_field(tprmp, frames, **kwargs):
+    '''Only works with 2D data'''
+    only_global = kwargs.get('only_global', True)
+    plot_gaussian = kwargs.get('plot_gaussian', True)
+    margin = kwargs.get('margin', 0.5)
+    res = kwargs.get('res', 0.1)
+    new_fig = kwargs.get('new_fig', False)
+    show = kwargs.get('show', False)
+    mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin)
+    if new_fig:
+        plt.figure()
+    _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, res=res)
     if not only_global:
         pass  # TODO: implement plotting in frame if needed
     if show:
@@ -87,6 +130,7 @@ def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=Tru
 
 
 def plot_potential_field(tprmp, frames, **kwargs):
+    '''Only works with 2D data'''
     only_global = kwargs.get('only_global', True)
     plot_gaussian = kwargs.get('plot_gaussian', True)
     three_d = kwargs.get('three_d', False)
@@ -94,14 +138,10 @@ def plot_potential_field(tprmp, frames, **kwargs):
     res = kwargs.get('res', 0.1)
     new_fig = kwargs.get('new_fig', False)
     show = kwargs.get('show', False)
-    origin = tprmp.model.manifold.get_origin()
-    frame_origins = np.array([v.transform(origin) for v in frames.values()])
-    ranges = np.array([frame_origins[:, 0].max() - frame_origins[:, 0].min(), frame_origins[:, 1].max() - frame_origins[:, 1].min()]).max() * 0.5 + margin
-    mid_x = (frame_origins[:, 0].max() + frame_origins[:, 0].min()) * 0.5
-    mid_y = (frame_origins[:, 1].max() + frame_origins[:, 1].min()) * 0.5
+    mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin)
     if new_fig:
         plt.figure()
-    _plot_potential_field_global(tprmp, frames, [mid_x, mid_y], ranges, plot_gaussian=plot_gaussian, three_d=three_d, res=res)
+    _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, three_d=three_d, res=res)
     if not only_global:
         if three_d:
             plt.figure()
@@ -168,3 +208,13 @@ def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=
         axs[f_key].plot([0, 0], [0, 1 / 2], 'b')
     if plot_gaussian:
         _plot_gmm_frames(tprmp.model, frames, axs=axs, three_d=False)
+
+
+def _get_data_ranges(frames, origin, margin=0.1, d=2):
+    frame_origins = np.array([v.transform(origin) for v in frames.values()])
+    minmax = np.zeros((d, 2))
+    for i in range(d):
+        minmax[i] = [frame_origins[:d, i].min(), frame_origins[:d, i].max()]
+    ranges = (minmax[:, 1] - minmax[:, 0]).max() * 0.5 + margin
+    mid = (minmax[:, 1] + minmax[:, 0]) * 0.5
+    return mid, ranges

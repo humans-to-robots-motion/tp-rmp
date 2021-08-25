@@ -115,8 +115,8 @@ class TPHSMM(TPGMM):
             plot_demo(demo, plot_quat=plot_quat, new_fig=True, new_ax=True, three_d=three_d, show=False)
             plot_gmm(self, demo.get_task_parameters(), plot_quat=plot_quat, tag=tag if tagging else None, new_fig=False, three_d=three_d, show=show)
 
-    def set_params(self, model_params):
-        super(TPHSMM, self).set_params(model_params)
+    def set_params(self, model_params, raw=False):
+        super(TPHSMM, self).set_params(model_params, raw=raw)
         self._trans_prob = model_params["trans_prob"]
         self._duration_prob = model_params["duration_prob"]
         self._duration_mvns = model_params["duration_mvns"]
@@ -124,8 +124,8 @@ class TPHSMM(TPGMM):
         self._end_states = model_params["end_states"]
         self._dt = model_params["dt"]
 
-    def parameters(self):
-        params = super(TPHSMM, self).parameters()
+    def parameters(self, raw=False):
+        params = super(TPHSMM, self).parameters(raw=raw)
         params.update({
             'trans_prob': self.trans_prob,
             'duration_prob': self.duration_prob,
@@ -180,9 +180,9 @@ class TPHSMM(TPGMM):
     def save(self, name=None):
         model_folder = join(DATA_PATH, self.name, 'models')
         os.makedirs(model_folder, exist_ok=True)
-        file = join(model_folder, name if name is not None else ('tphsmm_' + str(time.time()) + '.p'))
+        file = join(model_folder, 'tphsmm_' + (name if name is not None else (str(time.time()) + '.p')))
         with open(file, 'wb') as f:
-            pickle.dump(self.parameters(), f)
+            pickle.dump(self.parameters(raw=True), f)
 
     @staticmethod
     def compute_tag_to_demo(demos):
@@ -211,7 +211,7 @@ class TPHSMM(TPGMM):
             raise ValueError(f'[TPHSMM]: File {file} does not exist!')
         model_params = load(file)
         model = TPHSMM(name=task_name)
-        model.set_params(model_params)
+        model.set_params(model_params, raw=True)
         return model
 
     @property

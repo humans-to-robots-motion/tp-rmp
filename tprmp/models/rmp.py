@@ -43,14 +43,16 @@ def compute_dissipation_term(weights, d0, dx):
     return Ds
 
 
-def compute_potentials(phi0, x, mvns, stiff_scale=1., tau=1., potential_method='quadratic'):
+def compute_potentials(phi0, x, mvns, stiff_scale=1., tau=1., potential_method='quadratic', manifold=None):
     num_comp = len(mvns)
     P = np.zeros(num_comp)
-    manifold = mvns[0].manifold
+    if manifold is None:
+        manifold = mvns[0].manifold
+    d = manifold.dim_M
     for k in range(num_comp):
         comp = mvns[k]
-        v = manifold.log_map(x, base=comp.mean)
-        quadratic = v.T @ ((stiff_scale**2) * comp.cov_inv) @ v
+        v = manifold.log_map(x[:d], base=comp.mean[:d])
+        quadratic = v.T @ ((stiff_scale**2) * comp.cov_inv[:d, :d]) @ v
         if potential_method == 'quadratic':
             P[k] = quadratic
         elif potential_method == 'tanh':
@@ -62,11 +64,11 @@ def compute_potentials(phi0, x, mvns, stiff_scale=1., tau=1., potential_method='
     return phi
 
 
-def compute_obsrv_prob(x, mvns, normalized=True, eps=1e-307):
+def compute_obsrv_prob(x, mvns, normalized=True, eps=1e-307, manifold=None):
     num_comp = len(mvns)
     prob = np.zeros(num_comp) if len(x.shape) == 1 else np.zeros((num_comp, x.shape[1]))
     for k in range(num_comp):
-        prob[k] = mvns[k].pdf(x)
+        prob[k] = mvns[k].pdf(x, manifold=manifold)
     if normalized:
         s = prob.sum()
         if s > eps:

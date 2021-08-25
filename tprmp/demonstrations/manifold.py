@@ -238,7 +238,7 @@ class Manifold(object):
                 i += n
             else:
                 Manifold.logger.error(f'Invalid manifold naming {man_name}.')
-        return np.array(pos_idx), np.array(quat_idx)      
+        return np.array(pos_idx), np.array(quat_idx)
 
     @staticmethod
     def get_quaternion_manifold():

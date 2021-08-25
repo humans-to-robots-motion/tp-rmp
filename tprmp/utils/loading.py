@@ -16,7 +16,7 @@ def save_demos(demo_file, trajs, traj_vels, frames, tags, dt=0.01):
         pickle.dump(data, f)
 
 
-def load_demos(data_file, tag=None, convert_wxyz=True):
+def load_demos(data_file, smooth=True, tag=None, convert_wxyz=True):
     '''Load data into Demonstration class with format xyzwxyz'''
     data = load(data_file)
     dt = data['dt']
@@ -34,7 +34,7 @@ def load_demos(data_file, tag=None, convert_wxyz=True):
             continue
         if convert_wxyz:
             data['trajs'][m][3:] = q_convert_wxyz(data['trajs'][m][3:])
-        demo = Demonstration(data['trajs'][m], manifold=manifold, dt=dt, tag=data['tags'][m])
+        demo = Demonstration(data['trajs'][m], smooth=smooth, manifold=manifold, dt=dt, tag=data['tags'][m])
         for k, v in data['frames'].items():
             p = v[m] if isinstance(v, list) else v
             demo.add_frame_from_pose(p, k)

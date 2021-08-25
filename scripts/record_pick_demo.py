@@ -24,25 +24,33 @@ parser.add_argument('-n', help='Name of record', type=str, default=str(time.time
 parser.add_argument('--num', help='Num of demos for each skill', type=bool, default=3)
 args = parser.parse_args()
 
-env = Environment(task=PalletizingBoxes(), disp=True, real_time_step=True)
+sampling_hz = 200
 margin = 0.0009
-speed = 0.000005
-timeout = 10
+speed = 0.0000005
+timeout = 30
+wait = 0.
+diff = 10
 direct = False
+env = Environment(task=PalletizingBoxes(), disp=True, real_time_step=True, sampling_hz=sampling_hz)
 
 save_path = join(ROOT_DIR, 'data', 'tasks', 'pick', 'demos')
 os.makedirs(save_path, exist_ok=True)
 save_name = join(save_path, args.n)
 manifold = Manifold.get_manifold_from_name('R^3 x S^3')
 box_id = env.task.goals[0][0][0]
-r = 0.01
+r = 0.02
 trajs = []
 traj_vels = []
 tags = []
 obj_frames = []
+ee_frames = []
 # grasp top
 pose_mean = np.array([0.5, -0.25, env.task.box_size[2] / 2])
-for _ in range(args.num):
+num_demo = 0
+len_demo = 0
+while True:
+    if num_demo == args.num:
+        break
     # theta = np.random.random() * 2 * np.pi
     # rotation = q_convert_xyzw(q_from_euler(np.array([0., 0., 0.])))
     rotation = np.array([0., 0., 0., 1.])
@@ -54,18 +62,31 @@ for _ in range(args.num):
     for _ in range(100):  # stabilize arm
         p.stepSimulation()
     input()
+    ee_start = env.robot_state['ee_pose']
     res = env.record_trajectory()
-    env.movep(pose, speed=speed, timeout=timeout, direct=direct, wait=2.)
+    env.movep(pose, speed=speed, timeout=timeout, direct=direct, wait=wait)
     traj, traj_vel = res.result()
     env.reset()
+    print(traj.shape)
+    if len_demo == 0:
+        len_demo = traj.shape[1]
+    else:
+        if abs(traj.shape[1] - len_demo) > diff:
+            continue
+    print('Accept!')
     trajs.append(traj)
     traj_vels.append(traj_vel)
-    print(traj.shape)
     tags.append('pick_top')
     obj_frames.append(np.append(target[0], target[1]))
+    ee_frames.append(ee_start)
+    num_demo += 1
 # grasp side
 pose_mean = np.array([0.5, -0.25, env.task.box_size[0] / 2])
-for _ in range(args.num):
+num_demo = 0
+len_demo = 0
+while True:
+    if num_demo == args.num:
+        break
     rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
     position = pose_mean + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
     p.resetBasePositionAndOrientation(box_id, position, rotation)
@@ -80,13 +101,23 @@ for _ in range(args.num):
     for _ in range(100):  # stabilize arm
         p.stepSimulation()
     input()
+    ee_start = env.robot_state['ee_pose']
     res = env.record_trajectory()
-    env.movep(pose, speed=speed, timeout=timeout, direct=direct)
+    env.movep(pose, speed=speed, timeout=timeout, direct=direct, wait=wait)
     traj, traj_vel = res.result()
     env.reset()
+    print(traj.shape)
+    if len_demo == 0:
+        len_demo = traj.shape[1]
+    else:
+        if abs(traj.shape[1] - len_demo) > diff:
+            continue
+    print('Accept!')
     trajs.append(traj)
     traj_vels.append(traj_vel)
     tags.append('pick_side')
     obj_frames.append(np.append(target[0], target[1]))
-frames = {'obj_frame': obj_frames, 'ee_frame': env.home_pose}
+    ee_frames.append(ee_start)
+    num_demo += 1
+frames = {'obj_frame': obj_frames, 'ee_frame': ee_frames}
 save_demos(save_name, trajs, traj_vels, frames, tags, dt=1/env.sampling_hz)

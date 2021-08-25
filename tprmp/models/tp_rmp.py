@@ -25,6 +25,7 @@ class TPRMP(object):
     def __init__(self, **kwargs):
         self._sigma = kwargs.pop('sigma', 1.)
         self._stiff_scale = kwargs.pop('stiff_scale', 1.)
+        self._var_scale = kwargs.pop('var_scale', 1.)
         self._tau = kwargs.pop('tau', 1.)
         self._potential_method = kwargs.pop('potential_method', 'quadratic')
         self._d_scale = kwargs.pop('d_scale', 1.)
@@ -36,10 +37,10 @@ class TPRMP(object):
 
     def save(self, name=None):
         self.model.save(name)
-        file = join(DATA_PATH, self.model.name, 'models', name if name is not None else ('dynamics_' + str(time.time()) + '.p'))
-        os.makedirs(file, exist_ok=True)
+        file = join(DATA_PATH, self.model.name, 'models', 'dynamics_' + (name if name is not None else (str(time.time()) + '.p')))
         with open(file, 'wb') as f:
-            pickle.dump({'phi0': self._phi0, 'd0': self._d0}, f)
+            pickle.dump({'phi0': self._phi0, 'd0': self._d0, 'stiff_scale': self._stiff_scale, 'var_scale': self._var_scale,
+                         'tau': self._tau, 'potential_method': self._potential_method, 'd_scale': self._d_scale}, f)
 
     def generate_global_gmm(self, frames):
         self._global_mvns = self.model.generate_global_gmm(frames)
@@ -92,16 +93,16 @@ class TPRMP(object):
                     weights[f] = 1. if f == min_frame else 0.
         return weights, frame_dists
 
-    def compute_potential_field(self, x):
-        weights = compute_obsrv_prob(x, self._global_mvns)
-        phi = compute_potentials(self._phi0, x, self._global_mvns, stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
+    def compute_potential_field(self, x, manifold=None):
+        weights = compute_obsrv_prob(x, self._global_mvns, manifold=manifold)
+        phi = compute_potentials(self._phi0, x, self._global_mvns, stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method, manifold=manifold)
         Phi = weights.T @ phi
         return Phi
 
-    def compute_potential_field_frame(self, lx, frame):
+    def compute_potential_field_frame(self, lx, frame, manifold=None):
         mvns = self.model.get_local_gmm(frame)
-        weights = compute_obsrv_prob(lx, mvns)
-        phi = compute_potentials(self.phi0[frame], lx, mvns, stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method)
+        weights = compute_obsrv_prob(lx, mvns, manifold=manifold)
+        phi = compute_potentials(self.phi0[frame], lx, mvns, stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method, manifold=manifold)
         Phi = weights.T @ phi
         return Phi
 
@@ -122,15 +123,14 @@ class TPRMP(object):
         beta = kwargs.get('beta', 1e-5)
         min_d = kwargs.get('min_d', 20.)
         energy = kwargs.get('energy', 0.)
-        var_scale = kwargs.get('var_scale', 1.)
         verbose = kwargs.get('verbose', False)
         # train TP-HSMM/TP-GMM
         self.model.train(demos, **kwargs)
         if 'S' in self.model.manifold.name:  # decouple orientation and position
             pos_idx, quat_idx = self.model.manifold.get_pos_quat_indices(tangent=True)
             self.model.reset_covariance(pos_idx, quat_idx)
-        if var_scale > 1.:
-            self.model.scale_covariance(var_scale)
+        if self._var_scale > 1.:
+            self.model.scale_covariance(self._var_scale)
         # train dynamics
         self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha=alpha, beta=beta,
                                                  stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method, min_d=min_d, energy=energy, verbose=verbose)
@@ -145,12 +145,14 @@ class TPRMP(object):
         :param model_name: name of model in data/models
         """
         tprmp = TPRMP()
-        tprmp._model = TPHSMM.load(task_name, 'stats_' + model_name)
+        tprmp._model = TPHSMM.load(task_name, 'tphsmm_' + model_name)
         file = join(DATA_PATH, task_name, 'models', 'dynamics_' + model_name)
         if not exists(file):
             raise ValueError(f'[TPHSMM]: File {file} does not exist!')
         dynamics = load(file)
         tprmp._phi0, tprmp._d0 = dynamics['phi0'], dynamics['d0']
+        tprmp._stiff_scale, tprmp._var_scale, tprmp._d_scale = dynamics['stiff_scale'], dynamics['var_scale'], dynamics['d_scale']
+        tprmp._potential_method, tprmp._tau = dynamics['potential_method'], dynamics['tau']
         return tprmp
 
     @property

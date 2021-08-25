@@ -365,12 +365,12 @@ class Environment(gym.Env):
             state = self.robot_state
             traj.append(state['ee_pose'])
             traj_vel.append(state['ee_vel'])
-            # time.sleep(1 / self.sampling_hz)
+            time.sleep(1 / self.sampling_hz)
         traj = np.vstack(traj).T
         traj_vel = np.vstack(traj_vel).T
         # record traj at self.sampling_hz
-        traj = traj[:, ::self.sampling_hz]
-        traj_vel = traj_vel[:, ::self.sampling_hz]
+        # traj = traj[:, ::self.sampling_hz]
+        # traj_vel = traj_vel[:, ::self.sampling_hz]
         return traj, traj_vel
 
     @property

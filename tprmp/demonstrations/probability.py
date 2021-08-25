@@ -16,7 +16,7 @@ class ManifoldGaussian(object):
         self.mean = mean
         self.cov = cov
 
-    def pdf(self, p):
+    def pdf(self, p, manifold=None):
         """
         Evaluates pdf of the distribution at the point p.
 
@@ -28,8 +28,17 @@ class ManifoldGaussian(object):
         -------
         :return pdf_p: float, or np.array of shape (t,), the pdf values at the points p.
         """
-        v = self.manifold.log_map(p, base=self.mean)
-        return self._nf * np.exp(-(v * self.cov_inv.dot(v)).sum(0) / 2)
+        if manifold is None:
+            manifold = self.manifold
+            nf = self._nf
+            cov_inv = self.cov_inv
+            d = manifold.dim_M
+        else:
+            d = manifold.dim_M
+            cov_inv = self.cov_inv[:d, :d]
+            nf = 1 / (np.sqrt((2 * np.pi)**manifold.dim_T)) * np.linalg.det(cov_inv)
+        v = manifold.log_map(p[:d], base=self.mean[:d])
+        return nf * np.exp(-(v * cov_inv.dot(v)).sum(0) / 2)
 
     def transform(self, A, b):
         """
