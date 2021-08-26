@@ -33,7 +33,7 @@ def visualize_rmp(tprmp, frames, x0, dx0, T, dt, sample=None, x_limits=[0., 5.],
     ax2.set_ylim([vel_limits[0], vel_limits[1]])
     tprmp.generate_global_gmm(frames)
     for t in range(1, T):
-        ddx = tprmp.retrieve(x, dx, frames)
+        ddx = tprmp.retrieve(x, dx)
         dx = ddx * dt + dx
         x = dx * dt + x
         traj.append(x)

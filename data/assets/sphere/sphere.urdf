@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<robot name="simple_sphere">
+  <link name="sphere">
+    <inertial>
+      <mass value="1.0" />
+      <origin xyz="0 0 0" /> 
+      <inertia  ixx="1.0" ixy="0.0"  ixz="0.0"  iyy="1.0"  iyz="0.0"  izz="1.0" />
+    </inertial>
+    <visual>
+      <!-- visual origin is defined w.r.t. link local coordinate system -->
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <sphere radius="0.05"/>
+      </geometry>
+    </visual>
+    <collision>
+      <!-- collision origin is defined w.r.t. link local coordinate system -->
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <sphere radius="0.05"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

@@ -31,6 +31,7 @@ class TPRMP(object):
         self._d_scale = kwargs.pop('d_scale', 1.)
         self._model = TPHSMM(**kwargs)
         self._global_mvns = None
+        self._frames = None
         self._phi0 = None
         self._d0 = None
         self._R_net = None
@@ -43,21 +44,20 @@ class TPRMP(object):
                          'tau': self._tau, 'potential_method': self._potential_method, 'd_scale': self._d_scale}, f)
 
     def generate_global_gmm(self, frames):
+        self._frames = frames
         self._global_mvns = self.model.generate_global_gmm(frames)
 
-    def retrieve(self, x, dx, frames, compute_global_mvns=False):
+    def retrieve(self, x, dx):
         """
         Retrieve global RMP canonical form.
         """
-        M, f = self.rmp(x, dx, frames, compute_global_mvns=compute_global_mvns)
+        M, f = self.rmp(x, dx)
         return np.linalg.inv(M) @ f
 
-    def rmp(self, x, dx, frames, compute_global_mvns=False):
+    def rmp(self, x, dx):
         """
         Retrieve global RMP.
         """
-        if compute_global_mvns or self._global_mvns is None:
-            self.generate_global_gmm(frames)
         f = self.compute_global_policy(x, dx) - compute_coriolis_force(x, dx, self._global_mvns)
         M = compute_riemannian_metric(x, self._global_mvns)
         return M, f

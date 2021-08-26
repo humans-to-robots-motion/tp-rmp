@@ -194,6 +194,10 @@ class Environment(gym.Env):
     def setp(self, pose):
         """This should work with p.stepSimulation()"""
         targj = self.solve_ik(pose)
+        self.setj(targj)
+
+    def setj(self, targj):
+        """This should work with p.stepSimulation()"""
         for i in range(len(self.joints)):
             p.resetJointState(self.ur5, self.joints[i], targj[i])
         if not self.real_time_step:
@@ -274,8 +278,10 @@ class Environment(gym.Env):
             j += j_vel * dt
             self._config = j
             self._config_vel = j_vel
+            self.setj(j)
             ee = self.forward_kinematics()
-            joint_states = (j, j_vel, np.zeros_like(j))
+            zeros_v = [0.] * len(j)
+            joint_states = (j.tolist(), zeros_v, zeros_v)
             J_pos, J_rot = self.compute_ee_jacobian(joint_states)
             J_pos, J_rot = np.array(J_pos), np.array(J_rot)
             self._ee_pose = ee
@@ -368,9 +374,6 @@ class Environment(gym.Env):
             time.sleep(1 / self.sampling_hz)
         traj = np.vstack(traj).T
         traj_vel = np.vstack(traj_vel).T
-        # record traj at self.sampling_hz
-        # traj = traj[:, ::self.sampling_hz]
-        # traj_vel = traj_vel[:, ::self.sampling_hz]
         return traj, traj_vel
 
     @property

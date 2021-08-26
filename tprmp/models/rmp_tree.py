@@ -40,7 +40,7 @@ class RMPNode:
         if self.psi is not None and self.parent.x is not None:
             self.x = self.psi(self.parent.x)
         if self.J is not None and self.parent.dx is not None:
-            self.dx = self.J @ self.parent.dx
+            self.dx = np.dot(self.J(self.parent.x), self.parent.dx)
         for child in self.children:
             child.pushforward()
 
@@ -56,9 +56,10 @@ class RMPNode:
             if child.f is not None and child.M is not None:
                 f_term = child.f
                 if child.J_dot is not None:
-                    f_term -= child.M @ child.J_dot @ self.dx
-                f += child.J @ f_term
-                M += child.J.T @ child.M @ child.J
+                    f_term -= np.dot(np.dot(child.M, child.J_dot(self.x, self.dx)), self.dx)
+                J = child.J(self.x)
+                f += np.dot(J.T, f_term)
+                M += np.dot(np.dot(J.T, child.M), J)
         self.f = f
         self.M = M
 
@@ -73,17 +74,18 @@ class RMPRoot(RMPNode):
 
     def pushforward(self):
         logger.debug(f'{self.name}: Root pushforward')
-        [child.pushforward() for child in self.children]
+        for child in self.children:
+            child.pushforward()
 
     def resolve(self):
         logger.debug(f'{self.name}: Root pullback')
-        self.a = np.linalg.pinv(self.M) @ self.f
+        self.a = np.dot(np.linalg.pinv(self.M), self.f)
         return self.a
 
-    def solve(self, x, dx, **kwarg):
+    def solve(self, x, dx):
         self.set_root_state(x, dx)
         self.pushforward()
-        self.pullback(**kwarg)
+        self.pullback()
         return self.resolve()
 
 
@@ -92,9 +94,6 @@ class RMPLeaf(RMPNode):
         RMPNode.__init__(self, name, parent, manifold, psi, J, J_dot)
         self.rmp_func = rmp_func
 
-    def rmp(self, **kwarg):
-        self.M, self.f = self.rmp_func(self.x, self.dx, **kwarg)
-
-    def pullback(self, **kwarg):
+    def pullback(self):
         logger.debug(f'{self.name}: leaf pullback')
-        self.rmp(**kwarg)
+        self.M, self.f = self.rmp_func(self.x, self.dx)

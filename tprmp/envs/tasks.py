@@ -14,6 +14,7 @@ from tprmp.demonstrations.quaternion import q_convert_xyzw, q_convert_wxyz, q_fr
 _path_file = dirname(realpath(__file__))
 ASSETS_PATH = join(_path_file, '..', '..', 'data', 'assets')
 BOX_URDF = join(ASSETS_PATH, 'box', 'box-template.urdf')
+SPHERE_URDF = join(ASSETS_PATH, 'sphere', 'sphere-template.urdf')
 PALLET_URDF = join(ASSETS_PATH, 'pallet', 'pallet.urdf')
 
 
@@ -88,6 +89,52 @@ class Task():
             np.arange(-obj_dim[2] / 2, obj_dim[2] / 2, 0.02),
             sparse=False, indexing='xy')
         return np.vstack((xv.reshape(1, -1), yv.reshape(1, -1), zv.reshape(1, -1)))
+
+
+class PickBox(Task):
+    """Pick box task with collision avoidance."""
+    logger = logging.getLogger(__name__)
+
+    def __init__(self, box_size=None, R=0.03):
+        super(PickBox, self).__init__()
+        self.max_steps = 30
+        if box_size is None:
+            box_size = np.array([17. / 300, 0.09, 17. / 300])
+        self.box_id = None
+        self.sphere_id = None
+        self.box_size = box_size
+        self.R = R
+
+    def reset(self, env, wait=50, random=False, r=0.01):
+        super(PickBox, self).reset(env)
+        if random:
+            theta = np.random.random() * 2 * np.pi
+            pos_rand = np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
+        else:
+            theta = 0
+            pos_rand = np.zeros(3)
+        position = np.array([0.5, -0.25, self.box_size[2] / 2]) + pos_rand
+        rotation = q_convert_xyzw(q_from_euler(np.array([0., 0., theta])))
+        pose = np.append(position, rotation)
+        urdf = self.fill_template(BOX_URDF, {'DIM': self.box_size})
+        self.box_id = env.add_object(urdf, pose)
+        os.remove(urdf)
+        self.color_random_brown(self.box_id)
+        # Wait until spawned box settles.
+        for _ in range(wait):
+            p.stepSimulation()
+        return self.box_id
+
+    def spawn_sphere(self, env, sphere_pose=None, static=True):
+        if sphere_pose is None:
+            sphere_pose = np.array([0.5, -0.08, 0.13, 0., 0., 0., 1.])
+        urdf = self.fill_template(SPHERE_URDF, {'RADIUS': [self.R], 'MASS': [0. if static else 1.]})
+        self.sphere_id = env.add_object(urdf, sphere_pose)
+        os.remove(urdf)
+
+    def reward(self):
+        reward, info = super().reward()
+        return reward, info
 
 
 class PalletizingBoxes(Task):

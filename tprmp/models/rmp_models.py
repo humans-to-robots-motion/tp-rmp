@@ -38,7 +38,7 @@ class CollisionAvoidance(RMPLeaf):
             f = - grad_Phi - xi - Bdx
             f = min(max(f, -f_limit), f_limit)
             return M, f
-        RMPLeaf.__init__(self, name, parent, rmp_func, manifold=Manifold.get_euclidean_manifold(1))
+        RMPLeaf.__init__(self, name, rmp_func, parent=parent, manifold=Manifold.get_euclidean_manifold(1))
         # mappings f: R^3 -> R
         self.psi = lambda x: np.array(norm(x - self.c) / self.R - 1)  # noqa
         self.J = lambda x: (1. / (self.R * norm(x - self.c))) * (x - self.c).T  # noqa

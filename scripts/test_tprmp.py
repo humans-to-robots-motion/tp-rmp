@@ -17,7 +17,7 @@ from tprmp.demonstrations.base import Demonstration  # noqa
 from tprmp.demonstrations.frame import Frame  # noqa
 from tprmp.demonstrations.quaternion import q_convert_wxyz, q_from_euler, q_convert_xyzw  # noqa
 from tprmp.envs.gym import Environment # noqa
-from tprmp.envs.tasks import PalletizingBoxes # noqa
+from tprmp.envs.tasks import PickBox # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py')
@@ -57,12 +57,12 @@ else:
     model.save(name=args.data)
 model.model.plot_model(demos, var_scale=var_scale)
 # test tprmp
-env = Environment(task=PalletizingBoxes(), disp=True, sampling_hz=sampling_hz)
-ee_pose = np.array(np.array(demos[0].traj[:, 0]))
+env = Environment(task=PickBox(), disp=True, sampling_hz=sampling_hz)
+ee_pose = np.array(demos[0].traj[:, 0])
 A, b = Demonstration.construct_linear_map(manifold, ee_pose)
 ee_frame = Frame(A, b, manifold=manifold)
-box_id = env.task.goals[0][0][0]
-position = np.array([0.5, -0.25, env.task.box_size[0] / 2])  # + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
+box_id = env.task.box_id
+position = np.array([0.5, -0.25, env.task.box_size[1] / 2])  # + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
 rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
 p.resetBasePositionAndOrientation(box_id, position, rotation)
 target = p.getBasePositionAndOrientation(box_id)
@@ -79,5 +79,5 @@ env._ee_pose = curr
 for t in np.linspace(0, T, T * env.sampling_hz + 1):
     x = np.append(env.ee_pose[:3], q_convert_wxyz(env.ee_pose[3:]))
     dx = env.ee_vel
-    ddx = model.retrieve(x, dx, frames)
+    ddx = model.retrieve(x, dx)
     env.step(ddx)
