@@ -121,8 +121,9 @@ class TPRMP(object):
         """
         alpha = kwargs.get('alpha', 1e-5)
         beta = kwargs.get('beta', 1e-5)
-        min_d = kwargs.get('min_d', 20.)
+        d_min = kwargs.get('d_min', 20.)
         energy = kwargs.get('energy', 0.)
+        train_method = kwargs.get('train_method', 'match_accel')
         verbose = kwargs.get('verbose', False)
         # train TP-HSMM/TP-GMM
         self.model.train(demos, **kwargs)
@@ -132,8 +133,8 @@ class TPRMP(object):
         if self._var_scale > 1.:
             self.model.scale_covariance(self._var_scale)
         # train dynamics
-        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha=alpha, beta=beta,
-                                                 stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method, min_d=min_d, energy=energy, verbose=verbose)
+        self._phi0, self._d0 = optimize_dynamics(self.model, demos, alpha=alpha, beta=beta, train_method=train_method,
+                                                 stiff_scale=self._stiff_scale, tau=self._tau, potential_method=self._potential_method, d_min=d_min, energy=energy, verbose=verbose)
         # train local Riemannian metrics TODO: RiemannianNetwork is still under consideration
         # self._R_net = optimize_riemannian_metric(self, demos, **kwargs)
 

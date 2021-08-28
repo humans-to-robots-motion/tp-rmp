@@ -3,7 +3,7 @@ import numpy as np
 import logging
 
 from tprmp.models.coriolis import compute_coriolis_force
-from tprmp.models.rmp import compute_obsrv_prob, compute_policy, compute_potential_term, compute_riemannian_metric
+from tprmp.models.rmp import compute_dissipation_term, compute_hamiltonian, compute_obsrv_prob, compute_policy, compute_potential_term, compute_riemannian_metric
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +14,12 @@ def optimize_dynamics(tp_gmm, demos, **kwargs):
     stiff_scale = kwargs.get('stiff_scale', 1.)
     tau = kwargs.get('tau', 1.)
     potential_method = kwargs.get('potential_method', 'quadratic')
+    train_method = kwargs.get('train_method', 'match_accel')
     d_min = kwargs.get('d_min', 0.)
     energy = kwargs.get('energy', 0.)
     verbose = kwargs.get('verbose', False)
     phi0 = optimize_potentials(tp_gmm, demos, alpha=alpha, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, energy=energy, verbose=verbose)
-    d0 = optimize_dissipation(tp_gmm, demos, phi0, beta=beta, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, d_min=d_min, verbose=verbose)
+    d0 = optimize_dissipation(tp_gmm, demos, phi0, beta=beta, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, train_method=train_method, d_min=d_min, verbose=verbose)
     return phi0, d0
 
 
@@ -61,6 +62,7 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     stiff_scale = kwargs.get('stiff_scale', 1.)
     tau = kwargs.get('tau', 1.)
     potential_method = kwargs.get('potential_method', 'quadratic')
+    train_method = kwargs.get('train_method', 'match_accel')
     d_min = kwargs.get('d_min', 0.)
     d_default = kwargs.get('d_default', 50.)
     max_iters = kwargs.get('max_iters', 500)
@@ -70,11 +72,21 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     for demo in demos:
         x, dx, ddx = demo.traj, demo.d_traj, demo.dd_traj
         mvns = tp_gmm.generate_global_gmm(demo.get_task_parameters())
-        for t in range(x.shape[1]):
-            M = compute_riemannian_metric(x[:, t], mvns)
-            M_inv = np.linalg.inv(M)
-            f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method) - compute_coriolis_force(x[:, t], dx[:, t], mvns)
-            loss += (cp.norm(ddx[:, t] - M_inv @ f) / x.shape[1])
+        if train_method == 'match_accel':
+            for t in range(x.shape[1]):
+                M = compute_riemannian_metric(x[:, t], mvns)
+                M_inv = np.linalg.inv(M)
+                f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method) - compute_coriolis_force(x[:, t], dx[:, t], mvns)
+                loss += cp.norm(ddx[:, t] - M_inv @ f)
+        elif train_method == 'match_energy':
+            energy = compute_hamiltonian(phi0, x[:, 0], dx[:, 0], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
+            d_energy = 0.  # d_energy is negative
+            for t in range(x.shape[1] - 1):
+                weights = compute_obsrv_prob(x[:, t], mvns)
+                d_energy += compute_dissipation_term(weights, d0, dx[:, t]) @ (dx[:, t] * demo.dt)
+            loss += cp.norm(energy + d_energy)
+        else:
+            raise ValueError(f'Dissipation training method {train_method} is unrecognized!')
     loss /= len(demos)
     if beta > 0.:
         loss += beta * cp.pnorm(d0, p=2)**2  # L2 regularization
@@ -96,7 +108,7 @@ def potential_constraints(phi0, gap=0.):
     constraints = []
     for k in range(phi0.size - 1):
         constraints.append(phi0[k] >= (phi0[k + 1] + gap))
-    constraints.append(phi0 >= 0)
+    constraints.append(phi0[phi0.size - 1] >= 0)
     return constraints
 
 
@@ -104,7 +116,7 @@ def dissipation_constraints(d0, d_min=0.):
     constraints = []
     for k in range(d0.size - 1):
         constraints.append(d0[k] <= d0[k + 1])
-    constraints.append(d0 >= d_min)
+    constraints.append(d0[0] >= d_min)
     return constraints
 
 

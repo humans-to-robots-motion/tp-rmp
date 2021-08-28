@@ -8,6 +8,15 @@ def compute_riemannian_metric(x, mvns, eps=1e-5):
     return M + eps * np.eye(mvns[0].manifold.dim_T)
 
 
+def compute_hamiltonian(phi0, x, dx, mvns, stiff_scale=1., tau=1., potential_method='quadratic', manifold=None):
+    weights = compute_obsrv_prob(x, mvns, manifold=manifold)
+    phi = compute_potentials(phi0, x, mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, manifold=manifold)
+    M = compute_riemannian_metric(x, mvns)
+    T = 0.5 * dx.T @ M @ dx
+    Phi = weights.T @ phi
+    return T + Phi
+
+
 def compute_policy(phi0, d0, x, dx, mvns, stiff_scale=1., tau=1., potential_method='quadratic'):
     weights = compute_obsrv_prob(x, mvns)
     return compute_potential_term(weights, phi0, x, mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method) + compute_dissipation_term(weights, d0, dx)
@@ -36,9 +45,7 @@ def compute_potential_term(weights, phi0, x, mvns, stiff_scale=1., tau=1., poten
 
 
 def compute_dissipation_term(weights, d0, dx):
-    Ds = np.zeros_like(dx)
-    for k in range(weights.shape[0]):
-        Ds += -weights[k] * d0[k] * dx
+    Ds = -(weights @ d0) * dx
     return Ds
 
 

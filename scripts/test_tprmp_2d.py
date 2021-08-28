@@ -32,6 +32,7 @@ alpha, beta = 0., 0.
 stiff_scale = 1.
 tau = 0.5
 potential_method = 'tanh'
+train_method = 'match_accel'
 d_min = 0.
 d_scale = 1.
 energy = 38.
