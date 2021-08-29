@@ -12,14 +12,17 @@ def optimize_dynamics(tp_gmm, demos, **kwargs):
     alpha = kwargs.get('alpha', 1e-5)
     beta = kwargs.get('beta', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
+    mass_scale = kwargs.get('mass_scale', 1.)
     tau = kwargs.get('tau', 1.)
+    delta = kwargs.get('delta', 1.)
     potential_method = kwargs.get('potential_method', 'quadratic')
     train_method = kwargs.get('train_method', 'match_accel')
     d_min = kwargs.get('d_min', 0.)
     energy = kwargs.get('energy', 0.)
     verbose = kwargs.get('verbose', False)
-    phi0 = optimize_potentials(tp_gmm, demos, alpha=alpha, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, energy=energy, verbose=verbose)
-    d0 = optimize_dissipation(tp_gmm, demos, phi0, beta=beta, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method, train_method=train_method, d_min=d_min, verbose=verbose)
+    phi0 = optimize_potentials(tp_gmm, demos, alpha=alpha, stiff_scale=stiff_scale, tau=tau, delta=delta, potential_method=potential_method, energy=energy, verbose=verbose)
+    d0 = optimize_dissipation(tp_gmm, demos, phi0, beta=beta, stiff_scale=stiff_scale, mass_scale=mass_scale,
+                              tau=tau, delta=delta, potential_method=potential_method, train_method=train_method, d_min=d_min, verbose=verbose)
     return phi0, d0
 
 
@@ -27,6 +30,7 @@ def optimize_potentials(tp_gmm, demos, **kwargs):
     alpha = kwargs.get('alpha', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
     tau = kwargs.get('tau', 1.)
+    delta = kwargs.get('delta', 1.)
     potential_method = kwargs.get('potential_method', 'quadratic')
     energy = kwargs.get('energy', 0.)
     eps = kwargs.get('eps', 1e-4)
@@ -39,7 +43,7 @@ def optimize_potentials(tp_gmm, demos, **kwargs):
         mvns = tp_gmm.generate_global_gmm(demo.get_task_parameters())
         for t in range(x.shape[1]):
             weights = compute_obsrv_prob(x[:, t], mvns)
-            f = compute_potential_term(weights, phi0, x[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
+            f = compute_potential_term(weights, phi0, x[:, t], mvns, stiff_scale=stiff_scale, tau=tau, delta=delta, potential_method=potential_method)
             v = dx[:, t]
             norm_v = np.linalg.norm(v)
             if norm_v > eps:
@@ -53,6 +57,7 @@ def optimize_potentials(tp_gmm, demos, **kwargs):
     problem.solve(verbose=verbose)
     logger.info('Optimizing potential...')
     logger.info(f'Status: {problem.status}')
+    logger.info(f'Final loss: {loss.value}')
     logger.info(f'Optimal phi0: {phi0.value}')
     return phi0.value
 
@@ -60,7 +65,9 @@ def optimize_potentials(tp_gmm, demos, **kwargs):
 def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
     beta = kwargs.get('beta', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
+    mass_scale = kwargs.get('mass_scale', 1.)
     tau = kwargs.get('tau', 1.)
+    delta = kwargs.get('delta', 1.)
     potential_method = kwargs.get('potential_method', 'quadratic')
     train_method = kwargs.get('train_method', 'match_accel')
     d_min = kwargs.get('d_min', 0.)
@@ -74,12 +81,13 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
         mvns = tp_gmm.generate_global_gmm(demo.get_task_parameters())
         if train_method == 'match_accel':
             for t in range(x.shape[1]):
-                M = compute_riemannian_metric(x[:, t], mvns)
+                M = compute_riemannian_metric(x[:, t], mvns, mass_scale=mass_scale)
                 M_inv = np.linalg.inv(M)
-                f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method) - compute_coriolis_force(x[:, t], dx[:, t], mvns)
+                f = compute_policy(phi0, d0, x[:, t], dx[:, t], mvns, stiff_scale=stiff_scale, tau=tau, delta=delta, potential_method=potential_method)
+                f -= compute_coriolis_force(x[:, t], dx[:, t], mvns, mass_scale=mass_scale)
                 loss += cp.norm(ddx[:, t] - M_inv @ f)
         elif train_method == 'match_energy':
-            energy = compute_hamiltonian(phi0, x[:, 0], dx[:, 0], mvns, stiff_scale=stiff_scale, tau=tau, potential_method=potential_method)
+            energy = compute_hamiltonian(phi0, x[:, 0], dx[:, 0], mvns, stiff_scale=stiff_scale, mass_scale=mass_scale, tau=tau, delta=delta, potential_method=potential_method)
             d_energy = 0.  # d_energy is negative
             for t in range(x.shape[1] - 1):
                 weights = compute_obsrv_prob(x[:, t], mvns)
@@ -96,6 +104,7 @@ def optimize_dissipation(tp_gmm, demos, phi0, **kwargs):
         problem.solve(max_iters=max_iters, verbose=verbose)
         logger.info('Optimizing dissipation...')
         logger.info(f'Status: {problem.status}')
+        logger.info(f'Final loss: {loss.value}')
         logger.info(f'Optimal d0: {d0.value}')
         res = d0.value
     except cp.error.SolverError:

@@ -3,23 +3,23 @@ import numpy as np
 from tprmp.models.rmp import compute_obsrv_prob
 
 
-def compute_coriolis_force(x, dx, mvns):
+def compute_coriolis_force(x, dx, mvns, mass_scale=1.):
     weights = compute_obsrv_prob(x, mvns)
     scale = compute_scale(weights, x, mvns)
-    return compute_dMdt(weights, scale, dx, mvns) @ dx - 0.5 * compute_dTdx(weights, scale, dx, mvns)
+    return compute_dMdt(weights, scale, dx, mvns, mass_scale=mass_scale) @ dx - 0.5 * compute_dTdx(weights, scale, dx, mvns, mass_scale=mass_scale)
 
 
-def compute_dMdt(weights, scale, dx, mvns):
+def compute_dMdt(weights, scale, dx, mvns, mass_scale=1.):
     scale = scale @ dx
-    Ms = np.array([comp.cov_inv for comp in mvns])
+    Ms = np.array([(mass_scale**2) * comp.cov_inv for comp in mvns])
     dMdt = Ms.T @ (weights * scale)
     return dMdt
 
 
-def compute_dTdx(weights, scale, dx, mvns):
+def compute_dTdx(weights, scale, dx, mvns, mass_scale=1.):
     dTdx = np.zeros_like(dx)
     for k in range(len(mvns)):
-        dTdx += weights[k] * (dx.T @ mvns[k].cov_inv @ dx) * scale[k]
+        dTdx += weights[k] * (dx.T @ ((mass_scale**2) * mvns[k].cov_inv) @ dx) * scale[k]
     return dTdx
 
 

@@ -78,7 +78,10 @@ class TPGMM(object):
     def scale_covariance(self, scale):
         for k in range(self.num_comp):
             for f_key in self.frame_names:
-                self._mvns[k][f_key].cov = self._mvns[k][f_key].cov * scale**2
+                if isinstance(scale, list):
+                    self._mvns[k][f_key].cov = self._mvns[k][f_key].cov * scale[k]**2
+                else:
+                    self._mvns[k][f_key].cov = self._mvns[k][f_key].cov * scale**2
 
     def get_local_gmm(self, frame, tag=None):
         if frame not in self.frame_names:
