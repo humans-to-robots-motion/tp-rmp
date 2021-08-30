@@ -21,7 +21,7 @@ from tprmp.envs.tasks import PickBox # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py')
-parser.add_argument('--loading', help='Load or not', type=bool, default=True)
+parser.add_argument('--loading', help='Load or not', type=bool, default=False)
 parser.add_argument('--task', help='The task folder', type=str, default='pick')
 parser.add_argument('--data', help='The data file', type=str, default='sample2.p')
 args = parser.parse_args()
@@ -32,13 +32,16 @@ data_file = join(DATA_DIR, args.data)
 T = 100
 NUM_COMP = 30
 alpha, beta = 0., 0.
-stiff_scale = 1.
+stiff_scale = 5.
+mass_scale = 0.2
 tau = 0.5
-potential_method = 'tanh'
+delta = 3.
+potential_method = 'huber'
+train_method = 'match_energy'
 d_min = 0.
 d_scale = 1.
-energy = 1.
-var_scale = 10.
+energy = 0.
+var_scale = 5.
 res = 0.01
 margin = 0.05
 verbose = False
@@ -52,8 +55,8 @@ manifold = demos[0].manifold
 if args.loading:
     model = TPRMP.load(args.task, model_name=args.data)
 else:
-    model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, var_scale=var_scale, tau=tau, potential_method=potential_method, d_scale=d_scale)
-    model.train(demos, alpha=alpha, beta=beta, d_min=d_min, energy=energy, verbose=verbose)
+    model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
+    model.train(demos, alpha=alpha, beta=beta, train_method=train_method, d_min=d_min, energy=energy, verbose=verbose)
     model.save(name=args.data)
 model.model.plot_model(demos, var_scale=var_scale)
 # test tprmp
