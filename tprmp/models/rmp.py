@@ -40,20 +40,17 @@ def compute_potential_term(weights, phi0, x, mvns, **kwargs):
     mean_pull = weights.T @ pulls
     for k in range(num_comp):
         Ps += weights[k] * phi[k] * (pulls[k] - mean_pull)
+        v = manifold.log_map(x, base=mvns[k].mean)
+        norm = np.sqrt((stiff_scale**2) * v.T @ pulls[k])
         if potential_method == 'quadratic':
             Ps += -weights[k] * (stiff_scale**2) * pulls[k]
         elif potential_method == 'tanh':
-            v = manifold.log_map(x, base=mvns[k].mean)
-            norm = np.sqrt((stiff_scale**2) * v.T @ pulls[k])
             Ps += -weights[k] * np.tanh(tau * norm) * (stiff_scale**2) * pulls[k] / norm
-        elif potential_method == 'huber':  # huber potential does not use mvns variance shape
-            v = manifold.log_map(x, base=mvns[k].mean)
-            quadratic = (stiff_scale**2) * v.T @ np.eye(manifold.dim_T) @ v
-            norm = np.sqrt(quadratic)
+        elif potential_method == 'huber':
             if norm <= delta:
-                Ps += -weights[k] * (stiff_scale**2) * v
+                Ps += -weights[k] * (stiff_scale**2) * pulls[k]
             else:
-                Ps += -weights[k] * (stiff_scale**2) * delta * v / norm
+                Ps += -weights[k] * (stiff_scale**2) * delta * pulls[k] / norm
         else:
             raise ValueError(f'Potential method {potential_method} is unrecognized!')
     return Ps
@@ -84,8 +81,7 @@ def compute_potentials(phi0, x, mvns, **kwargs):
         elif potential_method == 'tanh':
             norm = np.sqrt(quadratic)
             P[k] = 1 / tau * (np.exp(tau * norm) + np.exp(-tau * norm))
-        elif potential_method == 'huber':  # huber potential does not use mvns variance shape
-            quadratic = (stiff_scale**2) * v.T @ np.eye(manifold.dim_T) @ v
+        elif potential_method == 'huber':
             norm = np.sqrt(quadratic)
             if norm <= delta:
                 P[k] = 0.5 * quadratic

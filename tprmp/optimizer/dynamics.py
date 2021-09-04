@@ -20,7 +20,7 @@ def optimize_dynamics(tp_gmm, demos, **kwargs):
     d_min = kwargs.get('d_min', 0.)
     energy = kwargs.get('energy', 0.)
     verbose = kwargs.get('verbose', False)
-    phi0 = optimize_potentials(tp_gmm, demos, alpha=alpha, stiff_scale=stiff_scale, tau=tau, delta=delta, potential_method=potential_method, energy=energy, verbose=verbose)
+    phi0 = optimize_potentials(tp_gmm, demos, alpha=alpha, stiff_scale=stiff_scale, mass_scale=mass_scale, tau=tau, delta=delta, potential_method=potential_method, energy=energy, verbose=verbose)
     d0 = optimize_dissipation(tp_gmm, demos, phi0, beta=beta, stiff_scale=stiff_scale, mass_scale=mass_scale,
                               tau=tau, delta=delta, potential_method=potential_method, train_method=train_method, d_min=d_min, verbose=verbose)
     return phi0, d0
@@ -29,6 +29,7 @@ def optimize_dynamics(tp_gmm, demos, **kwargs):
 def optimize_potentials(tp_gmm, demos, **kwargs):
     alpha = kwargs.get('alpha', 1e-5)
     stiff_scale = kwargs.get('stiff_scale', 1.)
+    mass_scale = kwargs.get('mass_scale', 1.)
     tau = kwargs.get('tau', 1.)
     delta = kwargs.get('delta', 1.)
     potential_method = kwargs.get('potential_method', 'quadratic')
@@ -44,11 +45,13 @@ def optimize_potentials(tp_gmm, demos, **kwargs):
         for t in range(x.shape[1]):
             weights = compute_obsrv_prob(x[:, t], mvns)
             f = compute_potential_term(weights, phi0, x[:, t], mvns, stiff_scale=stiff_scale, tau=tau, delta=delta, potential_method=potential_method)
+            M = compute_riemannian_metric(x[:, t], mvns, mass_scale=mass_scale)
+            M_inv = np.linalg.inv(M)
             v = dx[:, t]
             norm_v = np.linalg.norm(v)
             if norm_v > eps:
                 v = v / norm_v
-            loss += (cp.norm(v - f) / x.shape[1])
+            loss += (cp.norm(v - M_inv @ f) / x.shape[1])
     loss /= len(demos)
     if alpha > 0.:
         loss += alpha * cp.pnorm(phi0, p=2)**2  # L2 regularization

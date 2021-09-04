@@ -30,7 +30,7 @@ dt = 0.01
 NUM_COMP = 5
 alpha, beta = 0., 0.
 stiff_scale = 1.
-mass_scale = 0.1
+mass_scale = 1.
 tau = 0.5
 delta = 2.
 potential_method = 'huber'
@@ -40,7 +40,8 @@ d_scale = 1.
 energy = 0.
 var_scale = 2.
 res = 0.05
-margin = 0.2
+max_z = 1000
+margin = 0.5
 verbose = False
 # load data
 data = load(data_file)
@@ -63,9 +64,14 @@ else:
     model.train(demos, alpha=alpha, beta=beta, d_min=d_min, train_method=train_method, energy=energy, verbose=verbose)
     model.save(name=args.data)
 # model.model.plot_model(demos, tagging=False, var_scale=var_scale, three_d=False)
-plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, three_d=True, res=res, new_fig=True, show=False)
+plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, max_z=max_z, three_d=True, res=res, new_fig=True, show=False)
 plot_dissipation_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, res=res, new_fig=True, show=True)
 # execution
 x0, dx0 = sample.traj[:, 0], np.zeros(2)
 visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
 input()
+x0, dx0 = np.array([1., 2.]), np.zeros(2)
+visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
+input()
+x0, dx0 = np.array([2., 1.]), np.zeros(2)
+visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])

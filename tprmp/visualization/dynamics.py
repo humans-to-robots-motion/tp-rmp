@@ -138,21 +138,22 @@ def plot_potential_field(tprmp, frames, **kwargs):
     three_d = kwargs.get('three_d', False)
     margin = kwargs.get('margin', 0.5)
     res = kwargs.get('res', 0.1)
+    max_z = kwargs.get('max_z', 1000)
     new_fig = kwargs.get('new_fig', False)
     show = kwargs.get('show', False)
     mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin)
     if new_fig:
         plt.figure()
-    _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, three_d=three_d, res=res)
+    _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, three_d=three_d, res=res, max_z=max_z)
     if not only_global:
         if three_d:
             plt.figure()
-        _plot_potential_field_frames(tprmp, frames, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, three_d=three_d, res=res)
+        _plot_potential_field_frames(tprmp, frames, ranges, plot_gaussian=plot_gaussian, var_scale=var_scale, three_d=three_d, res=res, max_z=max_z)
     if show:
         plt.show()
 
 
-def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, alpha=0.7):
+def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, max_z=1000, alpha=0.7):
     if three_d:
         ax = plt.subplot(111, projection='3d')
     else:
@@ -164,7 +165,7 @@ def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True,
     tprmp.generate_global_gmm(frames)
     for i in range(X.shape[0]):
         for j in range(X.shape[1]):
-            Z[i, j] = tprmp.compute_potential_field(np.array([X[i, j], Y[i, j]]))
+            Z[i, j] = min(tprmp.compute_potential_field(np.array([X[i, j], Y[i, j]])), max_z)  # constraining plot
     if three_d:
         c = ax.plot_surface(X, Y, Z, cmap='RdBu', vmin=0., vmax=Z.max(), alpha=alpha)
     else:
@@ -177,7 +178,7 @@ def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True,
         _plot_gmm_global(tprmp.model, frames, var_scale=var_scale, three_d=False, new_ax=False)
 
 
-def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, alpha=0.7):
+def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, max_z=1000, alpha=0.7):
     if axs is None:
         axs = {}
         if three_d:
@@ -196,7 +197,7 @@ def _plot_potential_field_frames(tprmp, frames, ranges, axs=None, plot_gaussian=
         Z[f_key] = np.zeros_like(X)
         for i in range(X.shape[0]):
             for j in range(X.shape[1]):
-                Z[f_key][i, j] = tprmp.compute_potential_field_frame(np.array([X[i, j], Y[i, j]]), f_key)
+                Z[f_key][i, j] = min(tprmp.compute_potential_field_frame(np.array([X[i, j], Y[i, j]]), f_key), max_z)
         z_max = max(z_max, Z[f_key].max())
     for f_key in frames:
         if three_d:
