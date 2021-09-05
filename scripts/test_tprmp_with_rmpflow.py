@@ -26,21 +26,20 @@ from tprmp.envs.tasks import PickBox # noqa
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py')
 parser.add_argument('--task', help='The task folder', type=str, default='pick')
-parser.add_argument('--data', help='The data file', type=str, default='sample2.p')
+parser.add_argument('--data', help='The data file', type=str, default='huber.p')
 args = parser.parse_args()
 
-DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
-data_file = join(DATA_DIR, args.data)
 # parameters
 T = 100
-R = 0.06
+R = 0.045
 r = 0.01
+sphere_pose = np.array([0.5, -0.08, 0.12, 0., 0., 0., 1.])
 model = TPRMP.load(args.task, model_name=args.data)
 manifold = model.model.manifold
 dt = model.model.dt
 # environment
 env = Environment(task=PickBox(R=R), disp=True, sampling_hz=int(1/dt))
-env.task.spawn_sphere(env)
+env.task.spawn_sphere(env, sphere_pose)
 sphere_pose, _ = p.getBasePositionAndOrientation(env.task.sphere_id)
 # build rmp tree
 root = RMPRoot('C_space', manifold=Manifold.get_euclidean_manifold(len(env.joints)))
@@ -72,7 +71,7 @@ def ws_J(q):
 
 
 ws_node = RMPNode('R^3_space', parent=root, manifold=Manifold.get_euclidean_manifold(3), psi=lambda x: env.ee_pose[:3], J=ws_J)
-ca_node = CollisionAvoidance('CA_space', parent=ws_node, c=np.array(sphere_pose), R=env.task.R)
+ca_node = CollisionAvoidance('CA_space', parent=ws_node, c=np.array(sphere_pose), R=R)
 tprmp_node = RMPLeaf('TPRMP_space', model.rmp, parent=root, manifold=manifold, psi=tprmp_psi, J=tprmp_J)
 # init start & end pose
 start_pose = np.array([4.35803125e-1, 1.09041607e-1, 2.90120033e-1, 9.93708392e-1, -1.76660117e-4, 1.11998216e-1, 9.23757958e-6])
@@ -87,7 +86,7 @@ obj_pose = np.append(position, q_convert_wxyz(rotation))
 A, b = Demonstration.construct_linear_map(manifold, obj_pose)
 obj_frame = Frame(A, b, manifold=manifold)
 frames = {'ee_frame': ee_frame, 'obj_frame': obj_frame}
-plot_gmm(model.model, frames, var_scale=model.var_scale, new_fig=True, show=True)
+plot_gmm(model.model, frames, var_scale=1., new_fig=True, show=True)
 model.generate_global_gmm(frames)
 curr = np.array(start_pose)
 curr[3:] = q_convert_xyzw(curr[3:])

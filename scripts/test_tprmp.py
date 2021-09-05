@@ -21,18 +21,19 @@ from tprmp.envs.tasks import PickBox # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py')
-parser.add_argument('--loading', help='Load or not', type=bool, default=False)
+parser.add_argument('--loading', help='Load or not', type=bool, default=True)
 parser.add_argument('--task', help='The task folder', type=str, default='pick')
-parser.add_argument('--data', help='The data file', type=str, default='sample2.p')
+parser.add_argument('--demo', help='The data file', type=str, default='sample2.p')
+parser.add_argument('--data', help='The data file', type=str, default='huber.p')
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
-data_file = join(DATA_DIR, args.data)
+data_file = join(DATA_DIR, args.demo)
 # parameters
 T = 100
-NUM_COMP = 30
+NUM_COMP = 10
 alpha, beta = 0., 0.
-stiff_scale = 5.
+stiff_scale = 1.
 mass_scale = 0.2
 tau = 0.5
 delta = 3.
@@ -41,7 +42,7 @@ train_method = 'match_energy'
 d_min = 0.
 d_scale = 1.
 energy = 0.
-var_scale = 5.
+var_scale = 3.
 res = 0.01
 margin = 0.05
 verbose = False
@@ -58,7 +59,7 @@ else:
     model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
     model.train(demos, alpha=alpha, beta=beta, train_method=train_method, d_min=d_min, energy=energy, verbose=verbose)
     model.save(name=args.data)
-model.model.plot_model(demos, var_scale=var_scale)
+model.model.plot_model(demos, var_scale=1.)
 # test tprmp
 env = Environment(task=PickBox(), disp=True, sampling_hz=sampling_hz)
 ee_pose = np.array(demos[0].traj[:, 0])

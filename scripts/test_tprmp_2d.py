@@ -19,11 +19,12 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
                                  description='Example run: python test_tprmp.py test.p')
 parser.add_argument('--loading', help='Load or not', type=bool, default=True)
 parser.add_argument('--task', help='The task folder', type=str, default='test')
+parser.add_argument('--demo', help='The data file', type=str, default='test3.p')
 parser.add_argument('--data', help='The data file', type=str, default='test3.p')
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
-data_file = join(DATA_DIR, args.data)
+data_file = join(DATA_DIR, args.demo)
 # parameters
 oversteps = 1000
 dt = 0.01
@@ -63,7 +64,7 @@ else:
     model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
     model.train(demos, alpha=alpha, beta=beta, d_min=d_min, train_method=train_method, energy=energy, verbose=verbose)
     model.save(name=args.data)
-# model.model.plot_model(demos, tagging=False, var_scale=var_scale, three_d=False)
+# model.model.plot_model(sample, tagging=False, var_scale=1., three_d=False, show=False)
 plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, max_z=max_z, three_d=True, res=res, new_fig=True, show=False)
 plot_dissipation_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, res=res, new_fig=True, show=True)
 # execution

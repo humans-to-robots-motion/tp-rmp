@@ -28,7 +28,7 @@ class TPRMP(object):
         self._mass_scale = kwargs.pop('mass_scale', 1.)
         self._var_scale = kwargs.pop('var_scale', 1.)
         self._tau = kwargs.pop('tau', 1.)
-        self._delta = kwargs.pop('delta', 0.1)
+        self._delta = kwargs.pop('delta', 2.)
         self._potential_method = kwargs.pop('potential_method', 'tanh')
         self._d_scale = kwargs.pop('d_scale', 1.)
         self._model = TPHSMM(**kwargs)
@@ -43,7 +43,7 @@ class TPRMP(object):
         file = join(DATA_PATH, self.model.name, 'models', 'dynamics_' + (name if name is not None else (str(time.time()) + '.p')))
         with open(file, 'wb') as f:
             pickle.dump({'phi0': self._phi0, 'd0': self._d0, 'stiff_scale': self._stiff_scale, 'mass_scale': self._mass_scale, 'var_scale': self._var_scale,
-                         'tau': self._tau, 'potential_method': self._potential_method, 'd_scale': self._d_scale}, f)
+                         'tau': self._tau, 'delta': self._delta, 'potential_method': self._potential_method, 'd_scale': self._d_scale}, f)
 
     def generate_global_gmm(self, frames):
         self._frames = frames
@@ -156,7 +156,7 @@ class TPRMP(object):
         tprmp._phi0, tprmp._d0 = dynamics['phi0'], dynamics['d0']
         tprmp._stiff_scale, tprmp._mass_scale = dynamics.get('stiff_scale', 1.0), dynamics.get('mass_scale', 1.0)
         tprmp._var_scale, tprmp._d_scale = dynamics.get('var_scale', 1.0), dynamics.get('d_scale', 1.0)
-        tprmp._potential_method, tprmp._tau = dynamics.get('potential_method', 'tanh'), dynamics.get('tau', 1.)
+        tprmp._potential_method, tprmp._tau, tprmp._delta = dynamics.get('potential_method', 'huber'), dynamics.get('tau', 1.), dynamics.get('delta', 2.)
         return tprmp
 
     @property

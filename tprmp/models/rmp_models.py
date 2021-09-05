@@ -13,9 +13,10 @@ class CollisionAvoidance(RMPLeaf):
     Obstacle avoidance RMP leaf.
     This class considers a simple round obstacle. We can easily extend collision avoidance to Signed Distance Map if needed!
     """
-    def __init__(self, name, parent, c=np.zeros(3), R=1., epsilon=0.2, alpha=1e-5, eta=0):
+    def __init__(self, name, parent, c=np.zeros(3), R=1., epsilon=0.2, alpha=1e-12, gamma=1e-5, eta=0):
         self.R = R
         self.alpha = alpha
+        self.gamma = gamma
         self.eta = eta
         self.epsilon = epsilon
         self.c = c
@@ -25,15 +26,15 @@ class CollisionAvoidance(RMPLeaf):
                 w = 1e10
                 grad_w = 0
             else:
-                w = 1.0 / x ** 4
-                grad_w = -4.0 / x ** 5
-            u = epsilon + min(0, dx) * dx
+                w = self.gamma / x ** 4
+                grad_w = -self.gamma * 4.0 / x ** 5
+            u = epsilon + self.gamma * min(0, dx) * dx
+            grad_u = self.gamma * 2 * min(0, dx)
             g = w * u
-            grad_u = 2 * min(0, dx)
             grad_Phi = alpha * w * grad_w
             xi = 0.5 * dx ** 2 * u * grad_w
             M = g + 0.5 * dx * w * grad_u
-            M = min(max(M, -M_limit), M_limit)
+            M = min(max(M, self.epsilon), M_limit)
             Bdx = eta * g * dx
             f = - grad_Phi - xi - Bdx
             f = min(max(f, -f_limit), f_limit)
