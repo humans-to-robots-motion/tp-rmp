@@ -4,7 +4,7 @@ import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
 import logging
 
-from tprmp.visualization.demonstration import plot_frame
+from tprmp.visualization.demonstration import plot_frame, plot_frame_2d
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ def plot_gmm(model, frames, only_global=True, legend=True, new_fig=False, show=F
 def _plot_gmm_global(model, frames, **kwargs):
     var_scale = kwargs.get('var_scale', 1.)  # to plot descale variances
     plot_quat = kwargs.get('plot_quat', False)
+    plot_frames = kwargs.get('plot_frames', False)
     tag = kwargs.get('tag', None)
     three_d = kwargs.get('three_d', True)
     new_ax = kwargs.get('new_ax', True)
@@ -43,11 +44,17 @@ def _plot_gmm_global(model, frames, **kwargs):
         _plot_gaussian(global_mvns[k], color=cycle[k % len(cycle)], three_d=three_d, var_scale=scale)
         if three_d and plot_quat:
             plot_frame(global_mvns[k].mean[-4:], global_mvns[k].mean[:3], length_scale=0.02, alpha=0.8)
+    if plot_frames:
+        if three_d:
+            plot_frame(frames.values())
+        else:
+            plot_frame_2d(frames.values())
 
 
 def _plot_gmm_frames(model, frames, axs=None, **kwargs):
     var_scale = kwargs.get('var_scale', 1.)  # to plot descale variances
     plot_quat = kwargs.get('plot_quat', False)
+    plot_frames = kwargs.get('plot_frames', False)
     tag = kwargs.get('tag', None)
     three_d = kwargs.get('three_d', True)
     if axs is None:
@@ -72,6 +79,14 @@ def _plot_gmm_frames(model, frames, axs=None, **kwargs):
             _plot_gaussian(model.mvns[k][frame], color=cycle[k % len(cycle)], three_d=three_d, var_scale=scale)
             if three_d and plot_quat:
                 plot_frame(model.mvns[k][frame].mean[-4:], model.mvns[k][frame].mean[:3], length_scale=0.02, alpha=0.8)
+        if plot_frames:
+            if three_d:
+                plt.plot([0, 1 / 40], [0, 0], [0, 0], 'r')
+                plt.plot([0, 0], [0, 1 / 40], [0, 0], 'b')
+                plt.plot([0, 0], [0, 0], [0, 1 / 40], 'g')
+            else:
+                plt.plot([0, 1 / 10.], [0, 0], 'r')
+                plt.plot([0, 0], [0, 1 / 10.], 'b')
 
 
 def _plot_gaussian(mvn, color='b', three_d=True, var_scale=1.):

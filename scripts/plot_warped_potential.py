@@ -2,15 +2,21 @@ import sys
 import argparse
 import numpy as np
 from os.path import join, dirname, abspath
+import matplotlib.pyplot as plt
+import matplotlib
 import logging
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rcParams['font.size'] = 16
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
 from tprmp.utils.loading import load  # noqa
-from tprmp.visualization.demonstration import plot_demo  # noqa
-from tprmp.visualization.dynamics import plot_dissipation_field, plot_potential_field, visualize_rmp # noqa
+from tprmp.visualization.demonstration import plot_demo, _equalize_axes  # noqa
+from tprmp.visualization.dynamics import plot_dissipation_field, plot_potential_field, plot_potential_grad, visualize_rmp # noqa
+from tprmp.visualization.models import _plot_gmm_global # noqa
 from tprmp.models.tp_rmp import TPRMP  # noqa
 from tprmp.demonstrations.base import Demonstration  # noqa
 from tprmp.demonstrations.manifold import Manifold  # noqa
@@ -26,7 +32,6 @@ args = parser.parse_args()
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
 data_file = join(DATA_DIR, args.demo)
 # parameters
-oversteps = 600
 dt = 0.01
 NUM_COMP = 5
 alpha, beta = 0., 0.
@@ -55,24 +60,15 @@ for d in data:
     demo.add_frame_from_pose(traj[:, -1], 'end')
     demos.append(demo)
 # plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, three_d=False, margin=margin, show=True)
-# train tprmp
 sample = demos[0]
 frames = sample.get_task_parameters()
-if args.loading:
-    model = TPRMP.load(args.task, model_name=args.data)
-else:
-    model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
-    model.train(demos, alpha=alpha, beta=beta, d_min=d_min, train_method=train_method, energy=energy, verbose=verbose)
-    model.save(name=args.data)
-# model.model.plot_model(sample, tagging=False, var_scale=1., three_d=False, show=False)
-plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, max_z=max_z, three_d=True, res=res, new_fig=True, show=False)
-plot_dissipation_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, res=res, new_fig=True, show=True)
-# execution
-x0, dx0 = sample.traj[:, 0], np.zeros(2)
-visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
-input()
-x0, dx0 = np.array([1., 2.]), np.zeros(2)
-visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
-input()
-x0, dx0 = np.array([2., 1.]), np.zeros(2)
-visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
+model = TPRMP.load(args.task, model_name=args.data)
+# model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
+# model.train(demos, alpha=alpha, beta=beta, d_min=d_min, train_method=train_method, energy=energy, verbose=verbose)
+plt.figure()
+ax = plt.subplot(111)
+ax.set_aspect('equal')
+_equalize_axes(ax, sample.traj, three_d=False, margin=margin)
+_plot_gmm_global(model.model, frames, plot_frames=True, three_d=False, legend=False, new_ax=False)
+# plot_potential_grad(model, frames, sample=sample, warped=False, margin=margin, res=res, new_fig=True, show=False)
+plot_potential_grad(model, frames, sample=sample, warped=True, margin=margin, res=res, new_fig=True, show=True, colorbar=True)

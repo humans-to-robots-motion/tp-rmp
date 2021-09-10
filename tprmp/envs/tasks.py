@@ -106,7 +106,6 @@ class PickBox(Task):
         self.R = R
 
     def reset(self, env, wait=50, random=False, r=0.01):
-        super(PickBox, self).reset(env)
         if random:
             theta = np.random.random() * 2 * np.pi
             pos_rand = np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])

@@ -6,7 +6,7 @@ import pickle
 import time
 
 from tprmp.models.tp_hsmm import TPHSMM
-from tprmp.models.rmp import compute_policy, compute_riemannian_metric, compute_potentials, compute_obsrv_prob
+from tprmp.models.rmp import compute_policy, compute_potential_term, compute_riemannian_metric, compute_potentials, compute_obsrv_prob
 from tprmp.models.coriolis import compute_coriolis_force  # noqa
 from tprmp.optimizer.dynamics import optimize_dynamics
 from tprmp.utils.loading import load
@@ -68,6 +68,14 @@ class TPRMP(object):
         policy = compute_policy(self._phi0, self._d_scale * self._d0, x, dx, self._global_mvns,
                                 stiff_scale=self._stiff_scale, tau=self._tau, delta=self._delta, potential_method=self._potential_method)
         return policy
+
+    def compute_potential_grad(self, x, warped=False):
+        weights = compute_obsrv_prob(x, self._global_mvns)
+        grad = compute_potential_term(weights, self._phi0, x, self._global_mvns, stiff_scale=self._stiff_scale, tau=self._tau, delta=self._delta, potential_method=self._potential_method)
+        if warped:
+            M = compute_riemannian_metric(x, self._global_mvns, mass_scale=self._mass_scale)
+            grad = np.linalg.inv(M) @ grad
+        return grad
 
     def compute_frame_weights(self, x, frames, normalized=True, eps=1e-307):
         origin = self.model.manifold.get_origin()

@@ -29,9 +29,10 @@ def _plot_traj_global(demos, **kwargs):
     legend = kwargs.get('legend', True)
     plot_frames = kwargs.get('plot_frames', True)
     title = kwargs.get('title', 'Global frame')
-    new_ax = kwargs.get('new_ax', False)
+    new_ax = kwargs.get('new_ax', True)
     three_d = kwargs.get('three_d', True)
     margin = kwargs.get('margin', 0.1)
+    limits = kwargs.get('limits', None)
     if new_ax:
         if three_d:
             ax = plt.subplot(111, projection="3d")
@@ -40,12 +41,20 @@ def _plot_traj_global(demos, **kwargs):
     else:
         ax = plt.gca()
     plt.title(title)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    if three_d:
+        ax.set_zlabel('z')
     demo_tags = list(set([demo.tag for demo in demos]))
     tag_map = {v: i for i, v in enumerate(demo_tags)}
     cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
     # equal xyz scale
     sample_traj = demos[0].traj
-    _equalize_axes(ax, sample_traj, three_d=three_d, margin=margin)
+    if limits is None:
+        _equalize_axes(ax, sample_traj, three_d=three_d, margin=margin)
+    else:
+        ax.set_xlim([limits[0], limits[1]])
+        ax.set_ylim([limits[0], limits[1]])
     for d in range(len(demos)):
         _plot_traj(demos[d].traj, label=demos[d].tag, color=cycle[tag_map[demos[d].tag]], **kwargs)
         if plot_frames:
@@ -76,6 +85,10 @@ def _plot_traj_frames(demos, axs=None, **kwargs):
             plt.title(f'Frame {frame}')
     for f_key in frames:
         plt.sca(axs[f_key])
+        axs[f_key].set_xlabel('x')
+        axs[f_key].set_ylabel('y')
+        if three_d:
+            axs[f_key].set_zlabel('z')
         sample_traj = demos[0].traj_in_frames[f_key]['traj']
         _equalize_axes(axs[f_key], sample_traj, three_d=three_d, margin=margin)
         demo_tags = list(set([demo.tag for demo in demos]))
@@ -89,12 +102,13 @@ def _plot_traj_frames(demos, axs=None, **kwargs):
                 plt.plot([0, 0], [0, 1 / 40], [0, 0], 'b')
                 plt.plot([0, 0], [0, 0], [0, 1 / 40], 'g')
             else:
-                plt.plot([0, 1 / 2.], [0, 0], 'r')
-                plt.plot([0, 0], [0, 1 / 2.], 'b')
+                plt.plot([0, 1 / 10.], [0, 0], 'r')
+                plt.plot([0, 0], [0, 1 / 10.], 'b')
     if legend:
         handles, labels = plt.gca().get_legend_handles_labels()
         temp = {k: v for k, v in zip(labels, handles)}
         plt.legend(temp.values(), temp.keys(), loc='best')
+    return axs
 
 
 def _plot_traj(traj, **kwargs):

@@ -11,8 +11,8 @@ from os.path import join, dirname, realpath, exists
 from tprmp.models.tp_gmm import TPGMM
 from tprmp.optimizer.em import EM
 from tprmp.utils.loading import load
-from tprmp.visualization.demonstration import plot_demo
-from tprmp.visualization.models import plot_hsmm, plot_gmm
+from tprmp.visualization.demonstration import plot_demo, _plot_traj_frames
+from tprmp.visualization.models import plot_hsmm, plot_gmm, _plot_gmm_frames
 from tprmp.visualization.em import plot_gamma
 
 _path_file = dirname(realpath(__file__))
@@ -104,11 +104,15 @@ class TPHSMM(TPGMM):
         model_params['end_states'] = model_params['end_states'] / model_params['end_states'].sum()
         self.set_params(model_params)
 
-    def plot_model(self, demos, var_scale=1., tagging=True, plot_transition=False, plot_quat=False, three_d=True, show=True):
+    def plot_model(self, demos, plot_gmm_frames=False, var_scale=1., tagging=False, plot_transition=False, plot_quat=False, three_d=True, margin=0.1, show=True):
         if isinstance(demos, Demonstration):
             demos = [demos]
         if plot_transition:
-            plot_hsmm(self, new_fig=True, show=show)
+            plot_hsmm(self, new_fig=True, show=False)
+        if plot_gmm_frames:
+            plt.figure()
+            axs = _plot_traj_frames(demos, legend=False, plot_quat=False, margin=margin)
+            _plot_gmm_frames(self, self.frame_names, axs=axs)
         tag_to_demos = TPHSMM.compute_tag_to_demo(demos)
         for tag in tag_to_demos:  # plot one demo for each tag
             demo = tag_to_demos[tag][0]

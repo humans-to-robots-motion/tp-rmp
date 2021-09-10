@@ -30,9 +30,10 @@ parser.add_argument('--data', help='The data file', type=str, default='huber.p')
 args = parser.parse_args()
 
 # parameters
-T = 100
+N = 5
+T = 5
 R = 0.045
-r = 0.01
+r = 0.02
 sphere_pose = np.array([0.5, -0.08, 0.12, 0., 0., 0., 1.])
 model = TPRMP.load(args.task, model_name=args.data)
 manifold = model.model.manifold
@@ -78,22 +79,25 @@ start_pose = np.array([4.35803125e-1, 1.09041607e-1, 2.90120033e-1, 9.93708392e-
 A, b = Demonstration.construct_linear_map(manifold, start_pose)
 ee_frame = Frame(A, b, manifold=manifold)
 box_id = env.task.box_id
-position = np.array([0.5, -0.25, env.task.box_size[1] / 2])  # + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
-rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
-p.resetBasePositionAndOrientation(box_id, position, rotation)
-target = p.getBasePositionAndOrientation(box_id)
-obj_pose = np.append(position, q_convert_wxyz(rotation))
-A, b = Demonstration.construct_linear_map(manifold, obj_pose)
-obj_frame = Frame(A, b, manifold=manifold)
-frames = {'ee_frame': ee_frame, 'obj_frame': obj_frame}
-plot_gmm(model.model, frames, var_scale=1., new_fig=True, show=True)
-model.generate_global_gmm(frames)
-curr = np.array(start_pose)
-curr[3:] = q_convert_xyzw(curr[3:])
-env.setp(curr)
-env._ee_pose = curr
-env._config, _, _ = env.get_joint_states(np_array=True)
-# execution
-for t in np.linspace(0, T, T * env.sampling_hz + 1):
-    ddq = root.solve(env.config, env.config_vel)
-    env.step(ddq, return_data=False, config_space=True)
+for _ in range(N):
+    env._ee_vel = np.zeros(6)
+    env._config_vel = np.zeros(6)
+    position = np.array([0.56179028, -0.18820972, env.task.box_size[1] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
+    rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
+    p.resetBasePositionAndOrientation(box_id, position, rotation)
+    target = p.getBasePositionAndOrientation(box_id)
+    obj_pose = np.append(position, q_convert_wxyz(rotation))
+    A, b = Demonstration.construct_linear_map(manifold, obj_pose)
+    obj_frame = Frame(A, b, manifold=manifold)
+    frames = {'ee_frame': ee_frame, 'obj_frame': obj_frame}
+    # plot_gmm(model.model, frames, var_scale=1., new_fig=True, show=True)
+    model.generate_global_gmm(frames)
+    curr = np.array(start_pose)
+    curr[3:] = q_convert_xyzw(curr[3:])
+    env.setp(curr)
+    env._ee_pose = curr
+    env._config, _, _ = env.get_joint_states(np_array=True)
+    # execution
+    for t in np.linspace(0, T, T * env.sampling_hz + 1):
+        ddq = root.solve(env.config, env.config_vel)
+        env.step(ddq, return_data=False, config_space=True)

@@ -123,7 +123,7 @@ def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=Tru
             Z[i, j] = tprmp.compute_dissipation_field(np.array([X[i, j], Y[i, j]]))
     c = ax.pcolormesh(X, Y, Z, cmap='YlOrBr', shading='auto', vmin=0., vmax=Z.max(), alpha=alpha)
     ax.axes.set_aspect('equal')
-    ax.set_title('Global dissipation field')
+    ax.set_title('Global dissipative field')
     plt.gcf().colorbar(c, ax=ax)
     plot_frame_2d(frames.values())
     if plot_gaussian:
@@ -171,7 +171,7 @@ def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True,
     else:
         c = ax.pcolormesh(X, Y, Z, cmap='RdBu', shading='auto', vmin=0., vmax=Z.max(), alpha=alpha)
         ax.axes.set_aspect('equal')
-    ax.set_title('Global potential Phi')
+    ax.set_title('Global potential field')
     plt.gcf().colorbar(c, ax=ax)
     plot_frame_2d(frames.values())
     if plot_gaussian:
@@ -221,3 +221,39 @@ def _get_data_ranges(frames, origin, margin=0.1, d=2):
     ranges = (minmax[:, 1] - minmax[:, 0]).max() * 0.5 + margin
     mid = (minmax[:, 1] + minmax[:, 0]) * 0.5
     return mid, ranges
+
+
+def plot_potential_grad(tprmp, frames, sample=None, **kwargs):
+    '''Only works with 2D data'''
+    warped = kwargs.get('warped', False)
+    plot_frames = kwargs.get('plot_frames', True)
+    margin = kwargs.get('margin', 0.1)
+    res = kwargs.get('res', 0.05)
+    new_fig = kwargs.get('new_fig', False)
+    colorbar = kwargs.get('colorbar', False)
+    show = kwargs.get('show', False)
+    mid, ranges = _get_data_ranges(frames, tprmp.model.manifold.get_origin(), margin=margin)
+    x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
+    y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
+    X, Y = np.meshgrid(x, y)
+    px, py = np.zeros_like(X), np.zeros_like(X)
+    color = np.zeros_like(X)
+    tprmp.generate_global_gmm(frames)
+    if new_fig:
+        plt.figure()
+    ax = plt.subplot(111)
+    for i in range(X.shape[0]):
+        for j in range(X.shape[1]):
+            p = np.array([X[i, j], Y[i, j]])
+            px[i, j], py[i, j] = tprmp.compute_potential_grad(p, warped=warped)
+            color[i, j] = np.linalg.norm(np.array([px[i, j], py[i, j]]))
+    c = ax.quiver(X, Y, px, py, color, headwidth=2, headlength=3)
+    if sample is not None:
+        ax.plot(sample.traj[0], sample.traj[1], color="b", linestyle='--', alpha=0.6)
+    ax.set_aspect('equal')
+    if colorbar:
+        plt.gcf().colorbar(c, ax=ax)
+    if plot_frames:
+        plot_frame_2d(frames.values())
+    if show:
+        plt.show()
