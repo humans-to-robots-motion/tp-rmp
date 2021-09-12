@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 from tprmp.demonstrations.base import Demonstration
 from tprmp.demonstrations.quaternion import q_convert_wxyz
 from tprmp.demonstrations.manifold import Manifold
@@ -38,5 +39,25 @@ def load_demos(data_file, smooth=True, tag=None, convert_wxyz=True):
         for k, v in data['frames'].items():
             p = v[m] if isinstance(v, list) else v
             demo.add_frame_from_pose(p, k)
+        demos.append(demo)
+    return demos
+
+
+def load_demos_2d(data_file, smooth=True, dt=0.01, first=True):
+    '''Load 2d demonstrations'''
+    data = load(data_file)
+    demos = []
+    manifold = Manifold.get_euclidean_manifold(2)
+    if isinstance(data, list):
+        data = np.array(data)
+    start_f, end_f = data[0][:, 0], data[0][:, -1]
+    for d in data:
+        demo = Demonstration(d, manifold=manifold, dt=dt)
+        if first:
+            demo.add_frame_from_pose(start_f, 'start')
+            demo.add_frame_from_pose(end_f, 'end')
+        else:
+            demo.add_frame_from_pose(d[:, 0], 'start')
+            demo.add_frame_from_pose(d[:, -1], 'end')
         demos.append(demo)
     return demos

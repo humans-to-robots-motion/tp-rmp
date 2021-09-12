@@ -29,7 +29,7 @@ class TPRMP(object):
         self._var_scale = kwargs.pop('var_scale', 1.)
         self._tau = kwargs.pop('tau', 1.)
         self._delta = kwargs.pop('delta', 2.)
-        self._potential_method = kwargs.pop('potential_method', 'tanh')
+        self._potential_method = kwargs.pop('potential_method', 'huber')
         self._d_scale = kwargs.pop('d_scale', 1.)
         self._model = TPHSMM(**kwargs)
         self._global_mvns = None
@@ -49,10 +49,12 @@ class TPRMP(object):
         self._frames = frames
         self._global_mvns = self.model.generate_global_gmm(frames)
 
-    def retrieve(self, x, dx):
+    def retrieve(self, x, dx, frames=None):
         """
         Retrieve global RMP canonical form.
         """
+        if frames is not None:
+            self.generate_global_gmm(frames)
         M, f = self.rmp(x, dx)
         return np.linalg.inv(M) @ f
 

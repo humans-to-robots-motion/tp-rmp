@@ -27,16 +27,14 @@ def compute_policy(phi0, d0, x, dx, mvns, **kwargs):
 def compute_potential_term(weights, phi0, x, mvns, **kwargs):
     stiff_scale = kwargs.get('stiff_scale',  1.)
     tau = kwargs.get('tau',  1.)
-    delta = kwargs.get('delta',  0.1)
-    potential_method = kwargs.get('potential_method',  'quadratic')
+    delta = kwargs.get('delta',  2.)
+    potential_method = kwargs.get('potential_method',  'huber')
     manifold = kwargs.get('manifold', None)
     phi = compute_potentials(phi0, x, mvns, **kwargs)
     num_comp = len(mvns)
     manifold = mvns[0].manifold
     Ps = np.zeros(manifold.dim_T)
-    pulls = np.zeros((num_comp, manifold.dim_T))
-    for k in range(num_comp):
-        pulls[k] = mvns[k].cov_inv @ manifold.log_map(x, base=mvns[k].mean)
+    pulls = compute_pulls(x, mvns)
     mean_pull = weights.T @ pulls
     for k in range(num_comp):
         Ps += weights[k] * phi[k] * (pulls[k] - mean_pull)
@@ -56,6 +54,15 @@ def compute_potential_term(weights, phi0, x, mvns, **kwargs):
     return Ps
 
 
+def compute_pulls(x, mvns):
+    num_comp = len(mvns)
+    manifold = mvns[0].manifold
+    pulls = np.zeros((num_comp, manifold.dim_T))
+    for k in range(num_comp):
+        pulls[k] = mvns[k].cov_inv @ manifold.log_map(x, base=mvns[k].mean)
+    return pulls
+
+
 def compute_dissipation_term(weights, d0, dx):
     Ds = -(weights @ d0) * dx
     return Ds
@@ -64,8 +71,8 @@ def compute_dissipation_term(weights, d0, dx):
 def compute_potentials(phi0, x, mvns, **kwargs):
     stiff_scale = kwargs.get('stiff_scale',  1.)
     tau = kwargs.get('tau',  1.)
-    delta = kwargs.get('delta',  0.1)
-    potential_method = kwargs.get('potential_method',  'quadratic')
+    delta = kwargs.get('delta',  2.)
+    potential_method = kwargs.get('potential_method',  'huber')
     manifold = kwargs.get('manifold', None)
     num_comp = len(mvns)
     P = np.zeros(num_comp)

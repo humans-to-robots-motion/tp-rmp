@@ -8,7 +8,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
-from tprmp.utils.loading import load  # noqa
+from tprmp.utils.loading import load_demos_2d  # noqa
 from tprmp.visualization.demonstration import plot_demo  # noqa
 from tprmp.visualization.dynamics import plot_dissipation_field, plot_potential_field, visualize_rmp # noqa
 from tprmp.models.tp_rmp import TPRMP  # noqa
@@ -17,10 +17,11 @@ from tprmp.demonstrations.manifold import Manifold  # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py test.p')
-parser.add_argument('--loading', help='Load or not', type=bool, default=True)
+parser.add_argument('--loading', help='Load or not', type=bool, default=False)
+parser.add_argument('--saving', help='save or not', type=bool, default=False)
 parser.add_argument('--task', help='The task folder', type=str, default='test')
-parser.add_argument('--demo', help='The data file', type=str, default='test3.p')
-parser.add_argument('--data', help='The data file', type=str, default='test3.p')
+parser.add_argument('--demo', help='The data file', type=str, default='I.p')
+parser.add_argument('--data', help='The data file', type=str, default='I.p')
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
@@ -45,16 +46,8 @@ max_z = 1000
 margin = 0.5
 verbose = False
 # load data
-data = load(data_file)
-demos = []
-manifold = Manifold.get_euclidean_manifold(2)
-for d in data:
-    traj = np.stack(d)
-    demo = Demonstration(traj, manifold=manifold, dt=dt)
-    demo.add_frame_from_pose(traj[:, 0], 'start')
-    demo.add_frame_from_pose(traj[:, -1], 'end')
-    demos.append(demo)
-# plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, three_d=False, margin=margin, show=True)
+demos = load_demos_2d(data_file, dt=dt)
+plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, three_d=False, margin=margin, show=True)
 # train tprmp
 sample = demos[0]
 frames = sample.get_task_parameters()
@@ -63,8 +56,9 @@ if args.loading:
 else:
     model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
     model.train(demos, alpha=alpha, beta=beta, d_min=d_min, train_method=train_method, energy=energy, verbose=verbose)
-    model.save(name=args.data)
-# model.model.plot_model(sample, tagging=False, var_scale=1., three_d=False, show=False)
+    if args.saving:
+        model.save(name=args.data)
+model.model.plot_model(sample, tagging=False, var_scale=1., three_d=False, show=False)
 plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, max_z=max_z, three_d=True, res=res, new_fig=True, show=False)
 plot_dissipation_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, res=res, new_fig=True, show=True)
 # execution
