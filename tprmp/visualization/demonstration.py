@@ -38,6 +38,7 @@ def _plot_traj_global(demos, **kwargs):
             ax = plt.subplot(111, projection="3d")
         else:
             ax = plt.subplot(111)
+            ax.set_aspect('equal')
     else:
         ax = plt.gca()
     plt.title(title)

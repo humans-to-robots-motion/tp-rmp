@@ -131,11 +131,11 @@ class TPRMP(object):
         ----------
         :param demos: list of Demonstration objects
         """
-        alpha = kwargs.get('alpha', 1e-5)
-        beta = kwargs.get('beta', 1e-5)
-        d_min = kwargs.get('d_min', 20.)
+        alpha = kwargs.get('alpha', 0.)
+        beta = kwargs.get('beta', 0.)
+        d_min = kwargs.get('d_min', 0.)
         energy = kwargs.get('energy', 0.)
-        train_method = kwargs.get('train_method', 'match_accel')
+        train_method = kwargs.get('train_method', 'match_energy')
         verbose = kwargs.get('verbose', False)
         # train TP-HSMM/TP-GMM
         self.model.train(demos, **kwargs)

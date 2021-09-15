@@ -27,7 +27,7 @@ class Demonstration(object):
         self._manifold = manifold
         if self._dim_M != manifold.dim_M:
             raise RuntimeError('[Demonstration] Trajectory dim_M %s and the manifold %s does not match.' % (self._dim_M, manifold.dim_M))
-        self._smooth = kwargs.get('smooth', False)
+        self._smooth = kwargs.get('smooth', True)
         self._dt = kwargs.get('dt', 0.1)
         self._tag = kwargs.get('tag', None)
         self._task_parameters = dict()
