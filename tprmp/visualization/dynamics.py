@@ -115,8 +115,11 @@ def plot_dissipation_field(tprmp, frames, **kwargs):
         plt.show()
 
 
-def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., res=0.1, alpha=0.7):
-    ax = plt.subplot(111)
+def _plot_dissipation_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., new_ax=True, res=0.1, alpha=0.7):
+    if new_ax:
+        ax = plt.subplot(111)
+    else:
+        ax = plt.gca()
     x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
     y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
     X, Y = np.meshgrid(x, y)
@@ -157,11 +160,14 @@ def plot_potential_field(tprmp, frames, **kwargs):
         plt.show()
 
 
-def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., three_d=False, res=0.1, max_z=1000, alpha=0.7):
-    if three_d:
-        ax = plt.subplot(111, projection='3d')
+def _plot_potential_field_global(tprmp, frames, mid, ranges, plot_gaussian=True, var_scale=1., three_d=False, new_ax=True, res=0.1, max_z=1000, alpha=0.7):
+    if new_ax:
+        if three_d:
+            ax = plt.subplot(111, projection='3d')
+        else:
+            ax = plt.subplot(111)
     else:
-        ax = plt.subplot(111)
+        ax = plt.gca()
     x = np.arange(mid[0] - ranges, mid[0] + ranges, res)
     y = np.arange(mid[1] - ranges, mid[1] + ranges, res)
     X, Y = np.meshgrid(x, y)

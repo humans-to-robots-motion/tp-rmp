@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
                                  description='Example run: python test_tprmp.py')
 parser.add_argument('--loading', help='Load or not', type=bool, default=True)
 parser.add_argument('--task', help='The task folder', type=str, default='pick')
-parser.add_argument('--demo', help='The data file', type=str, default='sample2.p')
+parser.add_argument('--demo', help='The data file', type=str, default='sample.p')
 parser.add_argument('--data', help='The data file', type=str, default='huber.p')
 args = parser.parse_args()
 

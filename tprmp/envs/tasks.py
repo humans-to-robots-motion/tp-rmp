@@ -95,7 +95,7 @@ class PickBox(Task):
     """Pick box task with collision avoidance."""
     logger = logging.getLogger(__name__)
 
-    def __init__(self, box_size=None, R=0.03):
+    def __init__(self, box_size=None, R=0.045):
         super(PickBox, self).__init__()
         self.max_steps = 30
         if box_size is None:
@@ -126,7 +126,7 @@ class PickBox(Task):
 
     def spawn_sphere(self, env, sphere_pose=None, static=True):
         if sphere_pose is None:
-            sphere_pose = np.array([0.5, -0.08, 0.13, 0., 0., 0., 1.])
+            sphere_pose = np.array([0.5, -0.08, 0.12, 0., 0., 0., 1.])
         urdf = self.fill_template(SPHERE_URDF, {'RADIUS': [self.R], 'MASS': [0. if static else 1.]})
         self.sphere_id = env.add_object(urdf, sphere_pose)
         os.remove(urdf)

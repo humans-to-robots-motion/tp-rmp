@@ -43,4 +43,4 @@ class CollisionAvoidance(RMPLeaf):
         # mappings f: R^3 -> R
         self.psi = lambda x: np.array(norm(x - self.c) / self.R - 1)  # noqa
         self.J = lambda x: (1. / (self.R * norm(x - self.c))) * (x - self.c).T  # noqa
-        self.J_dot = lambda x, dx: ((-1. / norm(x - self.c) ** 3) * np.outer((x - self.c), (x - self.c)) + (1. / norm(x - self.c)) * np.eye(3)) @ dx / self.R  # noqa
+        self.J_dot = lambda x, dx: ((-1. / norm(x - self.c) ** 3) * np.outer((x - self.c), (x - self.c)) + (1. / norm(x - self.c)) * np.eye(x.shape[0])) @ dx / self.R  # noqa

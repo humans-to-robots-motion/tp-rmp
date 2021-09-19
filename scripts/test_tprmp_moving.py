@@ -24,8 +24,9 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
                                  description='Example run: python test_tprmp.py')
 parser.add_argument('--loading', help='Load or not', type=bool, default=True)
 parser.add_argument('--task', help='The task folder', type=str, default='pick')
-parser.add_argument('--demo', help='The data file', type=str, default='sample2.p')
+parser.add_argument('--demo', help='The data file', type=str, default='sample.p')
 parser.add_argument('--data', help='The data file', type=str, default='huber.p')
+parser.add_argument('--mode', help='The data file', type=int, default=0)
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
@@ -34,6 +35,9 @@ data_file = join(DATA_DIR, args.demo)
 N = 5
 T = 5
 obj_v = 0.05 * np.array([1., 1., 0.])
+omega = 30 * np.pi
+moving_goal_radius = 0.15
+goal_eps = 0.1
 NUM_COMP = 10
 alpha, beta = 0., 0.
 stiff_scale = 1.
@@ -49,7 +53,7 @@ var_scale = 3.
 res = 0.01
 margin = 0.05
 verbose = False
-r = 0.05
+r = 0.02
 # load data
 demos = load_demos(data_file, tag='pick_side')
 dt = demos[0].dt
@@ -71,22 +75,38 @@ A, b = Demonstration.construct_linear_map(manifold, ee_pose)
 ee_frame = Frame(A, b, manifold=manifold)
 box_id = env.task.box_id
 obj_rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
+start_pose = np.array(demos[0].traj[:, 0])
+start_pose[3:] = q_convert_xyzw(start_pose[3:])
 for _ in range(N):
-    start_pose = np.array(demos[0].traj[:, 0])
-    start_pose[3:] = q_convert_xyzw(start_pose[3:])
-    obj_position = np.array([0.5, -0.25, env.task.box_size[1] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
+    env.reset()
+    moving = True
+    origin = np.array([0.5, -0.25, env.task.box_size[1] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
     env.setp(start_pose)
     env._ee_pose = start_pose
-    env._ee_vel = np.zeros(6)
+    phi = np.random.uniform(low=-np.pi, high=np.pi)
     for t in np.linspace(0, T, T * env.sampling_hz + 1):
-        obj_position += obj_v * dt
-        p.resetBasePositionAndOrientation(box_id, obj_position, obj_rotation)
-        target = p.getBasePositionAndOrientation(box_id)
-        obj_pose = np.append(obj_position, q_convert_wxyz(obj_rotation))
-        A, b = Demonstration.construct_linear_map(manifold, obj_pose)
-        obj_frame = Frame(A, b, manifold=manifold)
-        frames = {'ee_frame': ee_frame, 'obj_frame': obj_frame}
+        if moving:
+            if args.mode == 1:
+                obj_position = origin + moving_goal_radius * np.array([np.cos(omega * t * dt + phi), np.sin(omega * t * dt + phi), 0.])
+            else:
+                origin += obj_v * dt
+                obj_position = origin
+            p.resetBasePositionAndOrientation(box_id, obj_position, obj_rotation)
+            obj_pose = np.append(obj_position, q_convert_wxyz(obj_rotation))
+            A, b = Demonstration.construct_linear_map(manifold, obj_pose)
+            obj_frame = Frame(A, b, manifold=manifold)
+            frames = {'ee_frame': ee_frame, 'obj_frame': obj_frame}
         x = np.append(env.ee_pose[:3], q_convert_wxyz(env.ee_pose[3:]))
         dx = env.ee_vel
         ddx = model.retrieve(x, dx, frames=frames)
         env.step(ddx)
+        if np.linalg.norm(x[:3] - obj_position) < goal_eps:
+            moving = False
+        if np.linalg.norm(x[:3] - obj_position - np.array([0., 0., env.task.box_size[1] / 2])) < 1e-2:
+            # grasp_position = x[:3] - np.array([0., 0., env.task.box_size[1] / 2])
+            # p.resetBasePositionAndOrientation(box_id, grasp_position, obj_rotation)
+            break
+    env.ee.activate()
+    env.movep(env.home_pose, speed=0.0001, timeout=5.)
+    env.ee.release()
+    input()

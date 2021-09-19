@@ -159,7 +159,7 @@ def plot_frame(frame, length_scale=0.05, alpha=1.):
         ax.plot([b[0], z_goal[0]], [b[1], z_goal[1]], [b[2], z_goal[2]], 'b', alpha=alpha)
 
 
-def plot_frame_2d(frame, length_scale=0.05, alpha=1.):
+def plot_frame_2d(frame, length_scale=0.2, alpha=1.):
     if isinstance(frame, Frame):
         frame = [frame]
     ax = plt.gca()

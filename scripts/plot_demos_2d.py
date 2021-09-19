@@ -8,7 +8,7 @@ matplotlib.rcParams['font.size'] = 8
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
-from tprmp.utils.loading import load_demos, load_demos_2d  # noqa
+from tprmp.utils.loading import load_demos_2d  # noqa
 from tprmp.visualization.demonstration import _plot_traj_global  # noqa
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', 'test', 'demos')
@@ -26,6 +26,10 @@ for n, name in enumerate(demo_names):
     axs[i, j].set_aspect('equal')
     _plot_traj_global(demos, limits=limits, legend=False, three_d=False, new_ax=False)
     last = demos[0].traj[:, -1]
-    plt.scatter(last[0], last[1], marker='*', color='k', s=30)
-# fig.tight_layout()
+    plt.scatter(last[0], last[1], marker='*', color='r', s=40)
+for ax in fig.axes:
+    try:
+        ax.label_outer()
+    except:  # noqa
+        pass
 plt.show()
