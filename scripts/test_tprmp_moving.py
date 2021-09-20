@@ -10,9 +10,6 @@ logging.getLogger().setLevel(logging.INFO)
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
 from tprmp.utils.loading import load_demos  # noqa
-from tprmp.visualization.demonstration import plot_demo  # noqa
-from tprmp.visualization.dynamics import plot_heatmap_3d  # noqa
-from tprmp.visualization.models import _plot_gmm_global  # noqa
 from tprmp.models.tp_rmp import TPRMP  # noqa
 from tprmp.demonstrations.base import Demonstration  # noqa
 from tprmp.demonstrations.frame import Frame  # noqa
@@ -35,7 +32,7 @@ data_file = join(DATA_DIR, args.demo)
 N = 5
 T = 5
 obj_v = 0.05 * np.array([1., 1., 0.])
-omega = 30 * np.pi
+omega = 0.3 * np.pi
 moving_goal_radius = 0.15
 goal_eps = 0.1
 NUM_COMP = 10
@@ -53,7 +50,7 @@ var_scale = 3.
 res = 0.01
 margin = 0.05
 verbose = False
-r = 0.02
+r = 0.1
 # load data
 demos = load_demos(data_file, tag='pick_side')
 dt = demos[0].dt
@@ -83,11 +80,11 @@ for _ in range(N):
     origin = np.array([0.5, -0.25, env.task.box_size[1] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
     env.setp(start_pose)
     env._ee_pose = start_pose
-    phi = np.random.uniform(low=-np.pi, high=np.pi)
+    phi = 0
     for t in np.linspace(0, T, T * env.sampling_hz + 1):
         if moving:
             if args.mode == 1:
-                obj_position = origin + moving_goal_radius * np.array([np.cos(omega * t * dt + phi), np.sin(omega * t * dt + phi), 0.])
+                obj_position = origin + moving_goal_radius * np.array([np.cos(omega * t + phi), np.sin(omega * t + phi), 0.])
             else:
                 origin += obj_v * dt
                 obj_position = origin
@@ -102,11 +99,12 @@ for _ in range(N):
         env.step(ddx)
         if np.linalg.norm(x[:3] - obj_position) < goal_eps:
             moving = False
-        if np.linalg.norm(x[:3] - obj_position - np.array([0., 0., env.task.box_size[1] / 2])) < 1e-2:
-            # grasp_position = x[:3] - np.array([0., 0., env.task.box_size[1] / 2])
-            # p.resetBasePositionAndOrientation(box_id, grasp_position, obj_rotation)
+        if np.linalg.norm(x[:3] - obj_position - np.array([0., 0., env.task.box_size[1] / 2])) < 3e-2:
+            grasp_position = x[:3] - np.array([0., 0., env.task.box_size[1] / 2 - 0.0005])
+            p.resetBasePositionAndOrientation(box_id, grasp_position, obj_rotation)
+            p.stepSimulation()
+            env.ee.activate()
             break
-    env.ee.activate()
     env.movep(env.home_pose, speed=0.0001, timeout=5.)
     env.ee.release()
     input()

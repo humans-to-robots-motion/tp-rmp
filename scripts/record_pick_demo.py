@@ -11,7 +11,7 @@ ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
 
 from tprmp.utils.loading import save_demos # noqa
-from tprmp.envs.tasks import PalletizingBoxes # noqa
+from tprmp.envs.tasks import PickBox # noqa
 from tprmp.envs.gym import Environment  # noqa
 from tprmp.demonstrations.base import Demonstration  # noqa
 from tprmp.demonstrations.frame import Frame  # noqa
@@ -31,14 +31,14 @@ timeout = 30
 wait = 0.
 diff = 10
 direct = False
-env = Environment(task=PalletizingBoxes(), disp=True, real_time_step=True, sampling_hz=sampling_hz)
+env = Environment(task=PickBox(), disp=True, real_time_step=True, sampling_hz=sampling_hz)
 
 save_path = join(ROOT_DIR, 'data', 'tasks', 'pick', 'demos')
 os.makedirs(save_path, exist_ok=True)
 save_name = join(save_path, args.n)
 manifold = Manifold.get_manifold_from_name('R^3 x S^3')
-box_id = env.task.goals[0][0][0]
-r = 0.02
+box_id = env.task.box_id
+r = 0.1
 trajs = []
 traj_vels = []
 tags = []
@@ -81,7 +81,7 @@ while True:
     ee_frames.append(ee_start)
     num_demo += 1
 # grasp side
-pose_mean = np.array([0.5, -0.25, env.task.box_size[0] / 2])
+pose_mean = np.array([0.5, -0.25, env.task.box_size[1] / 2])
 num_demo = 0
 len_demo = 0
 while True:
@@ -97,7 +97,7 @@ while True:
     obj_frame = Frame(A, b, manifold)
     pose = obj_frame.transform(np.append([0., 0., 0.], q_from_euler(np.array([-np.pi/2, 0., 0.]))))
     pose[3:] = q_convert_xyzw(pose[3:])
-    pose[2] += env.task.box_size[0] / 2 + margin
+    pose[2] += env.task.box_size[1] / 2 + margin
     for _ in range(100):  # stabilize arm
         p.stepSimulation()
     input()
