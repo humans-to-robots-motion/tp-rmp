@@ -8,7 +8,7 @@ logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
-matplotlib.rcParams['font.size'] = 16
+matplotlib.rcParams['font.size'] = 8
 
 ROOT_DIR = join(dirname(abspath(__file__)), '..', '..')
 sys.path.append(ROOT_DIR)

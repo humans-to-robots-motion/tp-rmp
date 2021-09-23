@@ -61,7 +61,7 @@ else:
     model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
     model.train(demos, alpha=alpha, beta=beta, train_method=train_method, d_min=d_min, energy=energy, verbose=verbose)
     model.save(name=args.data)
-model.model.plot_model(demos, var_scale=1.)
+# model.model.plot_model(demos, var_scale=1.)
 # test tprmp
 env = Environment(task=PickBox(), disp=True, sampling_hz=sampling_hz)
 ee_pose = np.array(demos[0].traj[:, 0])
@@ -69,6 +69,7 @@ A, b = Demonstration.construct_linear_map(manifold, ee_pose)
 ee_frame = Frame(A, b, manifold=manifold)
 box_id = env.task.box_id
 for _ in range(N):
+    env.reset()
     env._ee_vel = np.zeros(6)
     position = np.array([0.5, -0.25, env.task.box_size[1] / 2]) + np.random.uniform(low=-r, high=r) * np.array([1, 1, 0])
     rotation = q_convert_xyzw(q_from_euler(np.array([np.pi/2, 0., 0.])))
@@ -88,3 +89,11 @@ for _ in range(N):
         dx = env.ee_vel
         ddx = model.retrieve(x, dx)
         env.step(ddx)
+        if np.linalg.norm(x[:3] - position - np.array([0., 0., env.task.box_size[1] / 2])) < 5e-2:
+            grasp_position = x[:3] - np.array([0., 0., env.task.box_size[1] / 2 - 0.0005])
+            p.resetBasePositionAndOrientation(box_id, grasp_position, rotation)
+            p.stepSimulation()
+            env.ee.activate()
+            break
+    env.movep(env.home_pose, speed=0.0001, timeout=5.)
+    env.ee.release()

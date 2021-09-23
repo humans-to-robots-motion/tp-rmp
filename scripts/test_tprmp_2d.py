@@ -1,7 +1,9 @@
 import sys
 import argparse
 import numpy as np
-from os.path import join, dirname, abspath
+from os.path import join, dirname, abspath, expanduser
+import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
 import logging
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
@@ -9,64 +11,83 @@ logging.getLogger().setLevel(logging.INFO)
 ROOT_DIR = join(dirname(abspath(__file__)), '..')
 sys.path.append(ROOT_DIR)
 from tprmp.utils.loading import load_demos_2d  # noqa
-from tprmp.visualization.demonstration import plot_demo  # noqa
-from tprmp.visualization.dynamics import plot_dissipation_field, plot_potential_field, visualize_rmp # noqa
 from tprmp.models.tp_rmp import TPRMP  # noqa
-from tprmp.demonstrations.base import Demonstration  # noqa
-from tprmp.demonstrations.manifold import Manifold  # noqa
+from tprmp.visualization.demonstration import plot_frame_2d  # noqa
+from tprmp.models.rmp import compute_riemannian_metric  # noqa
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                  description='Example run: python test_tprmp.py test.p')
-parser.add_argument('--loading', help='Load or not', type=bool, default=False)
-parser.add_argument('--saving', help='save or not', type=bool, default=False)
 parser.add_argument('--task', help='The task folder', type=str, default='test')
-parser.add_argument('--demo', help='The data file', type=str, default='I.p')
-parser.add_argument('--data', help='The data file', type=str, default='I.p')
+parser.add_argument('--mode', help='Background', type=int, default=1)
+parser.add_argument('--demo', help='The data file', type=str, default='U.p')
+parser.add_argument('--data', help='The data file', type=str, default='U_9.p')
 args = parser.parse_args()
 
 DATA_DIR = join(ROOT_DIR, 'data', 'tasks', args.task, 'demos')
 data_file = join(DATA_DIR, args.demo)
+fps = 30
+video_file = join(expanduser("~"), 'U_tracking.mp4')
+metadata = dict(artist='Matplotlib')
+writer = FFMpegWriter(fps=fps, metadata=metadata)
 # parameters
-oversteps = 600
-dt = 0.01
-NUM_COMP = 5
-alpha, beta = 0., 0.
-stiff_scale = 1.
-mass_scale = 1.
-tau = 0.5
-delta = 2.
-potential_method = 'huber'
-train_method = 'match_energy'
-d_min = 0.
-d_scale = 1.
-energy = 0.
-var_scale = 2.
+limits = [0., 4.5]
 res = 0.05
-max_z = 1000
-margin = 0.5
-verbose = False
+colormap = 'RdBu' if args.mode == 1 else 'YlOrBr'
+dt = 0.01
+disturb = False
+disturb_period = [50, 150]
+disturb_magnitude = 10.
+v_eps = 1e-2
+max_steps = 2000
+wait = 10
 # load data
 demos = load_demos_2d(data_file, dt=dt)
-plot_demo(demos, only_global=False, plot_quat=False, new_fig=True, new_ax=True, three_d=False, margin=margin, show=True)
 # train tprmp
 sample = demos[0]
+manifold = sample.manifold
 frames = sample.get_task_parameters()
-if args.loading:
-    model = TPRMP.load(args.task, model_name=args.data)
-else:
-    model = TPRMP(num_comp=NUM_COMP, name=args.task, stiff_scale=stiff_scale, mass_scale=mass_scale, var_scale=var_scale, tau=tau, delta=delta, potential_method=potential_method, d_scale=d_scale)
-    model.train(demos, alpha=alpha, beta=beta, d_min=d_min, train_method=train_method, energy=energy, verbose=verbose)
-    if args.saving:
-        model.save(name=args.data)
-model.model.plot_model(sample, tagging=False, var_scale=1., three_d=False, show=False)
-plot_potential_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, max_z=max_z, three_d=True, res=res, new_fig=True, show=False)
-plot_dissipation_field(model, frames, only_global=True, margin=margin, var_scale=var_scale, res=res, new_fig=True, show=True)
-# execution
-x0, dx0 = sample.traj[:, 0], np.zeros(2)
-visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
-input()
-x0, dx0 = np.array([1., 2.]), np.zeros(2)
-visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
-input()
-x0, dx0 = np.array([2., 1.]), np.zeros(2)
-visualize_rmp(model, frames, x0, dx0, sample.traj.shape[1] + oversteps, dt, sample=sample, x_limits=[0., 4.], vel_limits=[-10., 10.])
+model = TPRMP.load(args.task, model_name=args.data)
+model.generate_global_gmm(frames)
+x, dx = sample.traj[:, 0], sample._d_traj[:, 0]
+traj = [x]
+t = 0
+plt.ion()
+fig = plt.figure()
+writer.setup(fig, outfile=video_file, dpi=None)
+ax = fig.add_subplot(111)
+ax.set_aspect('equal')
+ax.set_xlim([limits[0], limits[1]])
+ax.set_ylim([limits[0], limits[1]])
+line, = ax.plot(x[0], x[1], marker="o", color="b", markersize=1, linestyle='None', alpha=1.)
+ax.plot(sample.traj[0], sample.traj[1], color="b", linestyle='--', alpha=0.6)
+plot_frame_2d(frames.values())
+X, Y = np.meshgrid(np.arange(limits[0], limits[1], res), np.arange(limits[0], limits[1], res))
+Z = np.zeros_like(X)
+for i in range(X.shape[0]):
+    for j in range(X.shape[1]):
+        if args.mode == 1:
+            Z[i, j] = model.compute_potential_field(np.array([X[i, j], Y[i, j]]))
+        else:
+            Z[i, j] = model.compute_dissipation_field(np.array([X[i, j], Y[i, j]]))
+mesh = ax.pcolormesh(X, Y, Z, cmap=colormap, shading='auto', vmin=0., vmax=Z.max(), alpha=0.5)
+fig.colorbar(mesh, ax=ax)
+while t < max_steps:
+    ddx = model.retrieve(x, dx)
+    if disturb and (t >= disturb_period[0] and t <= disturb_period[1]):
+        M = compute_riemannian_metric(x, model._global_mvns, mass_scale=model._mass_scale)
+        v = dx / np.linalg.norm(dx)
+        df = disturb_magnitude * np.array([v[1], v[0]])
+        ddx += np.linalg.inv(M) @ df
+    dx = ddx * dt + dx
+    x = dx * dt + x
+    t += 1
+    if np.linalg.norm(dx) < v_eps:
+        break
+    # plotting
+    traj.append(x)
+    line.set_xdata(np.array(traj)[:, 0])
+    line.set_ydata(np.array(traj)[:, 1])
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+    writer.grab_frame()
+writer.finish()

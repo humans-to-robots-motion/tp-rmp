@@ -29,6 +29,7 @@ start_random_radius = 0.01
 omega = 30 * np.pi
 N = 10
 moving_goal_radius = 0.1
+delta = 3.
 disturb_magnitude = 10.
 disturb_period = [50, 150]
 disturb = False
@@ -37,7 +38,7 @@ goal_eps = 0.2
 mass_scale = 0.2
 Kp = 1 * np.eye(6)
 Kd = 0.1 * np.eye(6)
-worker = Experiment(task=task, demo_type=demo_type, demo_names=demo_names, start_random_radius=start_random_radius, moving_goal_radius=moving_goal_radius,
+worker = Experiment(task=task, demo_type=demo_type, demo_names=demo_names, start_random_radius=start_random_radius, moving_goal_radius=moving_goal_radius, delta=delta, mass_scale=mass_scale,
                     omega=omega, disturb_magnitude=disturb_magnitude, disturb_period=disturb_period, v_eps=v_eps, goal_eps=goal_eps, goal_frame=goal_frame)
 worker.load_demos()
 
