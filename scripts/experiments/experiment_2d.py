@@ -69,6 +69,15 @@ elif args.mode == 6:
     for r in moving_goal_radius:
         worker.moving_goal_radius = r
         error[r] = worker.adaptation_experiment(disturb=disturb)
+elif args.mode == 7:
+    print('Adaptation with rmpflow...')
+    disturb = False
+    num_comp = 9
+    worker.max_steps = 2000
+    radius = 0.1 * np.arange(1, 10)
+    error = {}
+    for R in radius:
+        error[R] = worker.composable_experiment(9, R, disturb=disturb)
 filename = join(worker.experiment_path, 'experiment_' + str(args.mode) + '_' + str(time.time()) + '.p')
 with open(filename, 'wb') as f:
     pickle.dump(error, f)

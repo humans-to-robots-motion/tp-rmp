@@ -3,20 +3,15 @@ import os
 import logging
 from os.path import join, dirname, realpath
 from tqdm import tqdm  # Displays a progress bar
-import pybullet as p
 
 from tprmp.models.tp_rmp import TPRMP
-from tprmp.models.rmp_tree import RMPLeaf, RMPNode, RMPRoot
+from tprmp.models.rmp_tree import RMPLeaf, RMPRoot
 from tprmp.models.rmp_models import CollisionAvoidance
 from tprmp.models.pd import PDController
 from tprmp.models.rmp import compute_riemannian_metric
-from tprmp.envs.gym import Environment
-from tprmp.envs.tasks import PickBox
 from tprmp.utils.loading import load_demos, load_demos_2d
 from tprmp.demonstrations.base import Demonstration
 from tprmp.demonstrations.frame import Frame
-from tprmp.demonstrations.manifold import Manifold
-from tprmp.demonstrations.quaternion import q_convert_wxyz, q_convert_xyzw
 
 _path_file = dirname(realpath(__file__))
 DATA_PATH = join(_path_file, '..', '..', 'data', 'tasks')
@@ -75,40 +70,11 @@ class Experiment(object):
                 model.train(self.demos[i], max_iter=self.max_iter, verbose=self.verbose)
                 model.save(name=n + '_' + str(num_comp) + '.p')
 
-    def init_rmpflow(self, model):
-        # environment
-        env = Environment(task=PickBox(), disp=True, sampling_hz=int(1 / self.dt))
-        env.task.spawn_sphere(env)
-        sphere_pose, _ = p.getBasePositionAndOrientation(env.task.sphere_id)
-        # build rmp tree
-        root = RMPRoot('C_space', manifold=Manifold.get_euclidean_manifold(len(env.joints)))
-
-        def tprmp_psi(q):
-            pose = np.array(env.ee_pose)
-            pose[3:] = q_convert_wxyz(pose[3:])
-            return pose
-
-        def tprmp_J(q):
-            if isinstance(q, np.ndarray):
-                q = q.tolist()
-            zero_v = [0.] * len(q)
-            joint_states = (q, zero_v, zero_v)
-            J_pos, J_rot = env.compute_ee_jacobian(joint_states=joint_states)
-            J = np.append(np.array(J_pos), np.array(J_rot), axis=0)
-            return J
-
-        def ws_J(q):
-            if isinstance(q, np.ndarray):
-                q = q.tolist()
-            zero_v = [0.] * len(q)
-            joint_states = (q, zero_v, zero_v)
-            J_pos, _ = env.compute_ee_jacobian(joint_states=joint_states)
-            return np.array(J_pos)
-
-        ws_node = RMPNode('R^3_space', parent=root, manifold=Manifold.get_euclidean_manifold(3), psi=lambda x: env.ee_pose[:3], J=ws_J)
-        CollisionAvoidance('CA_space', parent=ws_node, c=np.array(sphere_pose), R=env.task.R)
-        RMPLeaf('TPRMP_space', model.rmp, parent=root, manifold=model.model.manifold, psi=tprmp_psi, J=tprmp_J)
-        return env, root
+    def init_rmpflow(self, model, R):
+        root = RMPRoot('root_space', manifold=self.manifold)
+        ca = CollisionAvoidance('CA_space', parent=root, R=R)
+        RMPLeaf('TPRMP_space', model.rmp, parent=root, manifold=self.manifold, psi=lambda x: x, J=lambda x: np.eye(2))
+        return root, ca
 
     def tracking_experiment(self):
         tracking_error = {}
@@ -221,54 +187,44 @@ class Experiment(object):
                 goal_errors[num_comp].append(np.linalg.norm(self.manifold.log_map(x, base=goal)))
         return goal_errors
 
-    def composable_experiment(self, num_comp, disturb=False):
-        '''Only works with demo_type 6D'''
-        goal_errors = []
+    def composable_experiment(self, num_comp, R, disturb=False):
+        success = []
         for i, n in enumerate(tqdm(self.demo_names)):
             name = n + '_' + str(num_comp) + '.p'
             model = TPRMP.load(self.task, model_name=name)
             manifold = model.model.manifold
-            env, root = self.init_rmpflow(model)
+            root, ca = self.init_rmpflow(model, R)
             sample = self.demos[i][0]
-            start_pose = sample.traj[:, 0]
-            A, b = Demonstration.construct_linear_map(manifold, start_pose)
-            start_frame = Frame(A, b, manifold=manifold)
             frames = sample.get_task_parameters()
-            origin = frames['obj_frame'].transform(self.manifold.get_origin())
-            box_id = env.task.box_id
-            # init
-            curr = np.array(start_pose)
-            curr[3:] = q_convert_xyzw(curr[3:])
-            env.setp(curr)
-            env._ee_pose = curr
-            env._config, _, _ = env.get_joint_states(np_array=True)
-            t = 0
+            start_frame = frames['start']
+            x, dx = sample.traj[:, 0], np.zeros(2)
+            origin = sample.traj[:, -1]
             moving = True
-            count = 0
+            t = 0
             while t < self.max_steps:
                 if moving:
-                    end_pose = np.array(origin)
-                    end_pose[:3] += self.moving_goal_radius * np.array([np.cos(self.omega * t * self.dt), np.sin(self.omega * t * self.dt), 0.])
-                    A, b = Demonstration.construct_linear_map(self.manifold, end_pose)
-                    end_frame = Frame(A, b, manifold=self.manifold)
-                    frames = {'ee_frame': start_frame, 'obj_frame': end_frame}
-                p.resetBasePositionAndOrientation(box_id, end_pose[:3], q_convert_xyzw(end_pose[3:]))
-                model.generate_global_gmm(frames)
-                ddq = root.solve(env.config, env.config_vel)
-                env.step(ddq, return_data=False, config_space=True)
+                    end_pose = origin + self.moving_goal_radius * np.array([np.cos(self.omega * t * self.dt), np.sin(self.omega * t * self.dt)])
+                    A, b = Demonstration.construct_linear_map(manifold, end_pose)
+                    end_frame = Frame(A, b, manifold=manifold)
+                    frames = {'start': start_frame, 'end': end_frame}
+                    model.generate_global_gmm(frames)
+                    ca.c = model._global_mvns[int((num_comp - 1)/2)].mean
+                ddx = root.solve(x, dx)
+                if disturb and (t >= self.disturb_period[0] and t <= self.disturb_period[1]):
+                    M = compute_riemannian_metric(x, model._global_mvns, mass_scale=model._mass_scale)
+                    v = dx / np.linalg.norm(dx)
+                    df = self.disturb_magnitude * np.array([v[1], v[0]])
+                    ddx += np.linalg.inv(M) @ df
+                dx = ddx * self.dt + dx
+                x = manifold.exp_map(dx * self.dt, base=x)
                 goal = model._global_mvns[-1].mean
-                d = np.linalg.norm(self.manifold.log_map(env.ee_pose, base=goal))
+                d = np.linalg.norm(manifold.log_map(x, base=goal))
                 if d < self.goal_eps:
                     moving = False
-                if np.linalg.norm(env.ee_vel) < self.v_eps:
-                    count += 1
-                    if count >= self.wait:
-                        break
-                else:
-                    count = 0
+                    break
                 t += 1
-            goal_errors.append(np.linalg.norm(self.manifold.log_map(env.ee_pose, base=goal)))
-        return goal_errors
+            success.append(int(not moving))
+        return success
 
     def execute(self, model, frames, x0, dx0):
         x, dx = x0, dx0
