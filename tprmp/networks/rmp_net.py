@@ -6,14 +6,13 @@ import torch.nn.functional as F
 
 class LowTri:
     def __init__(self, m):
-        # Calculate lower triangular matrix indices using numpy
         self._m = m
         self._idx = np.tril_indices(self._m)
 
     def __call__(self, l):  # noqa
         batch_size = l.shape[0]
         self._L = torch.zeros(batch_size, self._m, self._m).type_as(l)
-        # Assign values to matrix:
+        # Assign values to matrix
         self._L[:batch_size, self._idx[0], self._idx[1]] = l[:]
         return self._L[:batch_size]
 
@@ -122,9 +121,7 @@ class DeepRMPNetwork(nn.Module):
         self._epsilon = kwargs.get("diagonal_epsilon", 1.e-5)
         # Construct Weight Initialization:
         if self._w_init == "xavier_normal":
-            # Construct initialization function:
             def init_hidden(layer):
-                # Set the Hidden Gain:
                 if self._g_hidden <= 0.0:
                     hidden_gain = torch.nn.init.calculate_gain('relu')
                 else:
@@ -133,7 +130,6 @@ class DeepRMPNetwork(nn.Module):
                 torch.nn.init.xavier_normal_(layer.weight, hidden_gain)
 
             def init_output(layer):
-                # Set Output Gain:
                 if self._g_output <= 0.0:
                     output_gain = torch.nn.init.calculate_gain('linear')
                 else:
@@ -142,10 +138,7 @@ class DeepRMPNetwork(nn.Module):
                 torch.nn.init.xavier_normal_(layer.weight, output_gain)
 
         elif self._w_init == "orthogonal":
-
-            # Construct initialization function:
             def init_hidden(layer):
-                # Set the Hidden Gain:
                 if self._g_hidden <= 0.0:
                     hidden_gain = torch.nn.init.calculate_gain('relu')
                 else:
@@ -167,7 +160,6 @@ class DeepRMPNetwork(nn.Module):
         elif self._w_init == "sparse":
             assert self._p_sparse < 1. and self._p_sparse >= 0.0
 
-            # Construct initialization function:
             def init_hidden(layer):
                 p_non_zero = self._p_sparse
                 hidden_std = self._g_hidden
@@ -183,9 +175,7 @@ class DeepRMPNetwork(nn.Module):
                 torch.nn.init.sparse_(layer.weight, p_non_zero, output_std)
 
         else:
-            raise ValueError(
-                "Weight Initialization Type must be in ['xavier_normal', 'orthogonal', 'sparse'] but is {0}"
-                .format(self._w_init))
+            raise ValueError(f"Weight Initialization Type must be in ['xavier_normal', 'orthogonal', 'sparse'] but is {self._w_init}")
 
         # Compute In- / Output Sizes:
         self.dim_M = dim_M
@@ -213,34 +203,25 @@ class DeepRMPNetwork(nn.Module):
         self._eye = torch.eye(self.dim_M).view(1, self.dim_M, self.dim_M)
         self.low_tri = LowTri(self.dim_M)
 
-        # Create Network:
         self.layers = nn.ModuleList()
         non_linearity = kwargs.get("activation", "ReLu")
 
-        # Create Input Layer:
         self.layers.append(
             LagrangianLayer(self.dim_M, self.n_width,
                             activation=non_linearity))
         init_hidden(self.layers[-1])
-
-        # Create Hidden Layer:
         for _ in range(1, self.n_hidden):
             self.layers.append(
                 LagrangianLayer(self.n_width,
                                 self.n_width,
                                 activation=non_linearity))
             init_hidden(self.layers[-1])
-
-        # Create output Layer:
         self.net_g = LagrangianLayer(self.n_width, 1, activation="Linear")
         init_output(self.net_g)
-
         self.net_lo = LagrangianLayer(self.n_width,
                                       l_lower_size,
                                       activation="Linear")
         init_hidden(self.net_lo)
-
-        # The diagonal must be non-negative. Therefore, the non-linearity is set to ReLu.
         self.net_ld = LagrangianLayer(self.n_width,
                                       self.dim_M,
                                       activation="ReLu")
@@ -254,59 +235,48 @@ class DeepRMPNetwork(nn.Module):
     def _dyn_model(self, q, qd):
         qd_3d = qd.view(-1, self.dim_M, 1)
         qd_4d = qd.view(-1, 1, self.dim_M, 1)
-
         # Create initial derivative of dq/dq.
         der = self._eye.repeat(q.shape[0], 1, 1).type_as(q)
-
         # Compute shared network between l & g:
         y, der = self.layers[0](q, der)
 
         for i in range(1, len(self.layers)):
             y, der = self.layers[i](y, der)
-
         # Compute the network heads including the corresponding derivative:
         l_lower, der_l_lower = self.net_lo(y, der)
         l_diag, der_l_diag = self.net_ld(y, der)
-
         # Compute the potential energy and the gravitational force:
         V, der_V = self.net_g(y, der)
         V = V.squeeze()
         g = der_V.squeeze()
-
         # Assemble l and der_l
         l_diag = l_diag
         l = torch.cat((l_diag, l_lower), 1)[:, self._idx]  # noqa
         der_l = torch.cat((der_l_diag, der_l_lower), 1)[:, self._idx, :]
-
         # Compute M:
         L = self.low_tri(l)
         LT = L.transpose(dim0=1, dim1=2)
         M = torch.matmul(L,
                          LT) + self._epsilon * torch.eye(self.dim_M).type_as(L)
-
         # Calculate dH/dt
         Ldt = self.low_tri(torch.matmul(der_l, qd_3d).view(-1, self.m))
         Hdt = torch.matmul(L, Ldt.transpose(dim0=1, dim1=2)) + torch.matmul(
             Ldt, LT)
-
         # Calculate dH/dq:
         Ldq = self.low_tri(der_l.transpose(2, 1).reshape(-1, self.m)).reshape(
             -1, self.dim_M, self.dim_M, self.dim_M)
         Hdq = torch.matmul(Ldq, LT.view(
             -1, 1, self.dim_M, self.dim_M)) + torch.matmul(
                 L.view(-1, 1, self.dim_M, self.dim_M), Ldq.transpose(2, 3))
-
         # Compute the Coriolis & Centrifugal forces:
         Hdt_qd = torch.matmul(Hdt, qd_3d).view(-1, self.dim_M)
         quad_dq = torch.matmul(qd_4d.transpose(dim0=2, dim1=3),
                                torch.matmul(Hdq, qd_4d)).view(-1, self.dim_M)
         c = Hdt_qd - 1. / 2. * quad_dq
-
         # Compute kinetic energy T
         H_qd = torch.matmul(M, qd_3d).view(-1, self.dim_M)
         T = 1. / 2. * torch.matmul(qd_4d.transpose(dim0=2, dim1=3),
                                    H_qd.view(-1, 1, self.dim_M, 1)).view(-1)
-
         # Compute dV/dt
         dVdt = torch.matmul(qd_4d.transpose(dim0=2, dim1=3),
                             g.view(-1, 1, self.dim_M, 1)).view(-1)
@@ -314,7 +284,6 @@ class DeepRMPNetwork(nn.Module):
 
     def rmp(self, q, qd, beta=0.5):  # beta is damping coefficient
         M, c, g, _, _, _ = self._dyn_model(q, qd)
-
         # Compute Acceleration, e.g., forward model:
         invH = torch.inverse(M)
         # damping_term = beta * qd.view(-1, self.dim_M, 1)
@@ -328,21 +297,13 @@ class DeepRMPNetwork(nn.Module):
         return E
 
     def cuda(self, device=None):
-
-        # Move the Network to the GPU:
         super(DeepRMPNetwork, self).cuda(device=device)
-
-        # Move the eye matrix to the GPU:
         self._eye = self._eye.cuda()
         self.device = self._eye.device
         return self
 
     def cpu(self):
-
-        # Move the Network to the CPU:
         super(DeepRMPNetwork, self).cpu()
-
-        # Move the eye matrix to the CPU:
         self._eye = self._eye.cpu()
         self.device = self._eye.device
         return self
