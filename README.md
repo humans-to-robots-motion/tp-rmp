@@ -11,6 +11,12 @@ cd tp-rmp
 pip install -r requirements.txt
 ```
 
+Additonally, please install `ffmpeg` by:
+
+```bash
+sudo apt install ffmpeg
+```
+
 ## Usage
 
 We create a dataset of 2D skills consisting of `start` frame and `end` frame
