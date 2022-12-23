@@ -1,6 +1,8 @@
 # tp-rmp
 This repos implements the method for the master thesis "Learning Task-parametrized Riemannian Motion Policies" from demonstrations.
-The thesis can be founded at [this link](http://elib.uni-stuttgart.de/bitstream/11682/11936/1/AnThesis.pdf).
+The thesis can be founded at:
+
+https://elib.uni-stuttgart.de/handle/11682/11936
 
 ## Installation
 
